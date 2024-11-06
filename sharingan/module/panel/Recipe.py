@@ -28,6 +28,7 @@ class Recipe(QWidget):
         self.btn_delete.clicked.connect(self.delete_items)
         self.btn_cook = QPushButton('Cook')
         self.btn_init = QPushButton('Init')
+        self.btn_init.setShortcut("Ctrl+S")
         self.btn_init.clicked.connect(self.init)
         self.layout_banner.addWidget(self.lbl_recipe)
         self.layout_button = QHBoxLayout()
