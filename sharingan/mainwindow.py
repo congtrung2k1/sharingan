@@ -1,10 +1,9 @@
 from PyQt5.QtWidgets import QHBoxLayout, QMainWindow, QSplitter
 from PyQt5.QtCore import Qt
-
-from sharingan.module import StylesManager
-from sharingan.module.Operation import Operation
-from sharingan.module.Recipe import Recipe
-from sharingan.module.Disassembler import Disassembler
+from sharingan.core import stylesmanager
+from sharingan.core.operation import Operation
+from sharingan.core.recipe import Recipe
+from sharingan.core.disassembler import Disassembler
 
 
 class MainWindow(QMainWindow):
@@ -22,9 +21,12 @@ class MainWindow(QMainWindow):
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 2)
         self.splitter.setStretchFactor(2, 3)
-        self.splitter.setStyleSheet(StylesManager.get_stylesheet())
+        self.splitter.setStyleSheet(stylesmanager.get_stylesheet())
         self.splitter.setChildrenCollapsible(False)
+        operation_width = self.operation.list_operation.sizeHint().width()
+        self.splitter.setSizes([operation_width, 2 * operation_width, 4 * operation_width])
+
         self.layout_panel = QHBoxLayout()
         self.layout_panel.addWidget(self.splitter)
-
         objEP.parent.setLayout(self.layout_panel)
+

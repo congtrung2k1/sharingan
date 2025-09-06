@@ -1,7 +1,7 @@
 import idaapi
-from sharingan.main_layout import MainWindow
-from  sharingan.module import StylesManager
-
+from sharingan.mainwindow import MainWindow
+from sharingan.core import stylesmanager
+from sharingan.core.contextmenu import InitHookMenu
 
 class PluginPanel(idaapi.PluginForm):
     def __init__(self):
@@ -22,6 +22,7 @@ class Sharingan(idaapi.plugin_t):
     def init(self):
         """Init the IDA plugin."""
         idaapi.msg("Sharingan initialized!!!\n")
+        self.hook_menu = InitHookMenu()
         return idaapi.PLUGIN_KEEP
     
     def run(self, arg):
@@ -29,10 +30,10 @@ class Sharingan(idaapi.plugin_t):
         idaapi.msg('Running ' + self.wanted_name + '\n')
         self.sharingan_gui = PluginPanel()
         self.sharingan_gui.Show('Sharingan')
-        StylesManager.load_stylesheet()
+        stylesmanager.load_stylesheet()
     
     def term(self):
-        pass
+        self.hook_menu.cleanup()
 
 
 def PLUGIN_ENTRY():
