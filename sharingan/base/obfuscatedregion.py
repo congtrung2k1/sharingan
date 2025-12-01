@@ -1,0 +1,47 @@
+from collections import namedtuple
+from typing import List
+
+
+RegionData = namedtuple('RegionData', ['start_ea', 'end_ea', 'obfus_size', 'comment', 'patch_bytes'])
+
+# one ObfuscatedRegion may contain sequence instructions (len == 1) or rambling instructions (len > 1)
+# one list contain many ObfuscatedRegion 
+class ObfuscatedRegion:
+    def __init__(self, start_ea: int = 0, end_ea: int = 0, obfus_size: int = 0, comment: str = '', patch_bytes: bytes = b'', name: str = ''):
+        self.regions: List[RegionData] = [RegionData(start_ea, end_ea, obfus_size, comment, patch_bytes)]
+        self.name = name
+        self.active = True
+
+    def append_obfu(self, start_ea: int, end_ea: int, obfus_size: int, comment: str, patch_bytes: bytes) -> None:
+        self.regions.append(RegionData(start_ea, end_ea, obfus_size, comment, patch_bytes))
+
+    def __str__(self) -> str:
+        lines = []
+        for r in self.regions:
+            lines.append(f'{hex(r.start_ea)} - {r.end_ea} - {r.comment} - {r.patch_bytes}')
+        return '\n'.join(lines)
+
+
+# list contain many ObfuscatedRegion
+class ListObfuscatedRegion(list):
+    def __init__(self) -> None:
+        super().__init__()
+        self.allowed_type = ObfuscatedRegion
+
+    def append(self, item: ObfuscatedRegion) -> None:
+        if not isinstance(item, self.allowed_type):
+            raise TypeError(f"Item must be of type {self.allowed_type.__name__}, got {type(item).__name__}")
+        super().append(item)
+
+    def insert(self, index: int, item: ObfuscatedRegion) -> None:
+        if not isinstance(item, self.allowed_type):
+            raise TypeError(f"Item must be of type {self.allowed_type.__name__}, got {type(item).__name__}")
+        super().insert(index, item)
+
+    def __setitem__(self, index: int, item: ObfuscatedRegion) -> None:
+        if not isinstance(item, self.allowed_type):
+            raise TypeError(f"Item must be of type {self.allowed_type.__name__}, got {type(item).__name__}")
+        super().__setitem__(index, item)
+
+    def __str__(self) -> str:
+        return '\n\n'.join(str(item) for item in self)

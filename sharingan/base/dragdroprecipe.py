@@ -1,7 +1,7 @@
 from PySide6.QtCore import QDataStream, Qt
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QAbstractItemView, QListView
-from sharingan.base.itemlist import ItemList
+from sharingan.base.ingredient import Ingredient
 import importlib, inspect, os
 import idaapi
 
@@ -15,6 +15,9 @@ class DragDropRecipe(QListWidget):
         self.setDragEnabled(True)
         self.setSelectionMode(QListView.ExtendedSelection)
 
+    def set_signal_toggle(self, signal_toggle):
+        self.signal_toggle = signal_toggle
+
     def dragEnterEvent(self, event):
         mime = event.mimeData()
         if mime.hasText() or mime.hasFormat('application/x-qabstractitemmodeldatalist'):
@@ -23,7 +26,6 @@ class DragDropRecipe(QListWidget):
             event.ignore()
 
     def mimeData(self, items):
-        """Override mimeData to ensure proper serialization of item data."""
         mime = super(DragDropRecipe, self).mimeData(items)
         if items:
             item = items[0]  # Handle single item for simplicity
@@ -34,7 +36,6 @@ class DragDropRecipe(QListWidget):
         return mime
 
     def startDrag(self, supportedActions):
-        """Initiate the drag operation."""
         item = self.currentItem()
         if item is None:
             return
@@ -43,24 +44,29 @@ class DragDropRecipe(QListWidget):
         drag = QDrag(self)
         drag.setMimeData(mime)
         drop_action = drag.exec(Qt.MoveAction)
-        if drop_action == Qt.MoveAction:
-            self.takeItem(row)  # Remove item after successful move
-            print(f"Removed item at row {row}")
+        # drop outside to remove
+        if drop_action != Qt.MoveAction:
+            self.takeItem(row)
+            print(f"Removed ingredient at row {row} (dropped outside)")
 
-    def dropEvent(self, event):
-        """Handle drop event and extract id_algorithm."""
+    def dropEvent(self, event):        
+        if event.source() == self:
+            super(DragDropRecipe, self).dropEvent(event)
+            event.acceptProposedAction()
+            return
+
+        id_algorithm = None
         mime = event.mimeData()
-        
         # Check for custom MIME type first
         if mime.hasFormat('application/x-id-algorithm'):
-            id_algorithm = mime.data('application/x-id-algorithm').decode('utf-8')
-            # print(f"Custom MIME data: id_algorithm={id_algorithm}")
+            data = mime.data('application/x-id-algorithm')
+            if not data.isEmpty():
+                id_algorithm = bytes(data).decode('utf-8')
         elif mime.hasFormat('application/x-qabstractitemmodeldatalist'):
             # Fallback to standard MIME type
-            id_algorithm = None
             stream = QDataStream(mime.data('application/x-qabstractitemmodeldatalist'))
             while not stream.atEnd():
-                row = stream.readInt32()  # Use Int32 instead of Int8 for row/col
+                row = stream.readInt32()
                 col = stream.readInt32()
                 item_data = {}
                 for _ in range(stream.readInt32()):  # Number of data entries
@@ -69,8 +75,6 @@ class DragDropRecipe(QListWidget):
                     item_data[role] = value
                     if role == Qt.DisplayRole:
                         id_algorithm = value
-                        print(f"Stream data: id_algorithm={id_algorithm}")
-            # print(f"Parsed item data: {item_data}")
         else:
             event.ignore()
             return
@@ -78,34 +82,40 @@ class DragDropRecipe(QListWidget):
         # Insert item to list widget
         if id_algorithm:
             obj_algorithm = self.classify_algorithm(id_algorithm)
-            if isinstance(obj_algorithm, ItemList):
-                list_adapter_item = QListWidgetItem()
-                list_adapter_item.setSizeHint(obj_algorithm.sizeHint())
-                to_index = self.count()
+            self.insert_ingredient_recipe(obj_algorithm, event)
+        else:
+            # Handle reordering
+            if event:
+                event.ignore()
+
+    def insert_ingredient_recipe(self, obj_algorithm, event):
+        if isinstance(obj_algorithm, Ingredient):
+            list_adapter_item = QListWidgetItem()
+            list_adapter_item.setSizeHint(obj_algorithm.sizeHint())
+            to_index = self.count()
+            if event:
                 ix = self.indexAt(event.pos())
                 if ix.isValid():
                     to_index = ix.row()
-                self.insertItem(to_index, list_adapter_item)
-                self.setItemWidget(list_adapter_item, obj_algorithm)
-            event.acceptProposedAction()
-        else:
-            # Handle reordering
-            if self.row(self.itemAt(event.pos())) == self.currentRow() + 1:
-                event.ignore()
-            else:
-                super(DragDropRecipe, self).dropEvent(event)
+            self.insertItem(to_index, list_adapter_item)
+            self.setItemWidget(list_adapter_item, obj_algorithm)
+            if event:
+                event.acceptProposedAction()
 
+    # find module to import
     def classify_algorithm(self, algorithm):
-        """Load and classify the algorithm from a module."""
+        algorithm = algorithm.lower()
         path_plugin = idaapi.get_ida_subdirs("plugins")
         for path in path_plugin:
             path_module = os.path.join(path, 'sharingan', 'ingredient', f'{algorithm}.py')
             if os.path.isfile(path_module):
                 try:
                     module = importlib.import_module(f"sharingan.ingredient.{algorithm}")
-                    for name_class, obj in inspect.getmembers(module, inspect.isclass):
-                        if issubclass(obj, ItemList) and obj != ItemList:
-                            return obj()
+                    for name_class, ingredient in inspect.getmembers(module, inspect.isclass):
+                        if issubclass(ingredient, Ingredient) and ingredient != Ingredient:
+                            ingre = ingredient()
+                            ingre.set_signal_toggle(self.signal_toggle)
+                            return ingre
                 except Exception as e:
-                    print(f"Error loading module {algorithm}: {e}")
+                    print(f"Error loading module {algorithm}: {path_module}")
         return None

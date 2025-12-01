@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QSplitter
 from PySide6.QtCore import Qt
-from sharingan.core import stylesmanager
+from sharingan.core.stylesmanager import ManageStyleSheet
 from sharingan.core.operation import Operation
 from sharingan.core.recipe import Recipe
 from sharingan.core.disassembler import Disassembler
@@ -18,15 +18,34 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.operation)
         self.splitter.addWidget(self.recipe)
         self.splitter.addWidget(self.disassembler)
+
+        self.splitter.setCollapsible(0, False)
+        self.splitter.setCollapsible(1, False)
+        self.splitter.setCollapsible(2, True)
+
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 2)
         self.splitter.setStretchFactor(2, 3)
-        self.splitter.setStyleSheet(stylesmanager.get_stylesheet())
+        self.splitter.setStyleSheet(ManageStyleSheet.get_stylesheet())
+
+        self.recipe.chk_compact.stateChanged.connect(self.toggle_compact)
         self.splitter.setChildrenCollapsible(False)
         operation_width = self.operation.list_operation.sizeHint().width()
-        self.splitter.setSizes([operation_width, 2 * operation_width, 4 * operation_width])
+        self.splitter.setSizes([operation_width, 1.5 * operation_width, 4 * operation_width])
 
         self.layout_panel = QHBoxLayout()
         self.layout_panel.addWidget(self.splitter)
         objEP.parent.setLayout(self.layout_panel)
+
+    def toggle_compact(self):
+        if self.recipe.chk_compact.isChecked():
+            self.disassembler.hide()
+            sizes = self.splitter.sizes()
+            if len(sizes) > 2:
+                sizes[2] = 0
+                self.splitter.setSizes(sizes)
+        else:
+            self.disassembler.show()
+            operation_width = self.operation.list_operation.sizeHint().width()
+            self.splitter.setSizes([operation_width, 1.5 * operation_width, 4 * operation_width])
 
