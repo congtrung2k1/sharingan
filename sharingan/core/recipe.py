@@ -70,7 +70,7 @@ class Recipe(QWidget):
         super().__init__()
         self.setMinimumSize(50, 100)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-    
+
         self.obfuscated_regions = []
         self.overlapping_regions = set()
         self.count_manual_bookmark = 0
@@ -136,7 +136,7 @@ class Recipe(QWidget):
         self.setLayout(self.layout)
 
     def __del__(self):
-        self.hint_hook.unhook()                                                                                                     
+        self.hint_hook.unhook()
 
     def parse_start_end_region(self, index):
         selection = self.cmb_bookmark.itemText(index)
@@ -152,7 +152,10 @@ class Recipe(QWidget):
             start_region, end_region = self.parse_start_end_region(index)
             DeobfuscateUtils.reset(start_region, end_region)
             self.cmb_bookmark.removeItem(index)
+
         self.obfuscated_regions.clear()
+        active_index = self.disassembler.currentIndex()
+        self.disassembler.refresh_tab_asmview(active_index)
         print('Reset all')
 
     # delete item in list recipe
@@ -208,7 +211,7 @@ class Recipe(QWidget):
             if ingredient.chk_active.isChecked():
                 print(ingredient.name, 'disable')
                 continue
-            
+
             # check mode
             if not isinstance(ingredient, Deobfuscator):
                 print(ingredient.name, 'wrong mode')
@@ -236,7 +239,7 @@ class Recipe(QWidget):
                     min_start = min(reg.start_ea for reg in r.regions)
                     max_end = max(reg.end_ea for reg in r.regions)
                     self.append_bookmark(min_start, max_end, hint, is_scan=True)
-        
+
         #highlight and check overlap
         self.check_overlapping_regions()
         self.highlight_region()
@@ -260,7 +263,7 @@ class Recipe(QWidget):
             if ingredient.chk_active.isChecked():
                 print(ingredient.name, 'disable')
                 continue
-            
+
             # check mode
             if not isinstance(ingredient, Decryption):
                 print(ingredient.name, 'wrong mode')
@@ -282,7 +285,7 @@ class Recipe(QWidget):
 
         if index == -1 or selection in ('Scanning', 'Manual'):
             return
-        
+
         start_region, end_region = self.parse_start_end_region(index)
         self.cmb_bookmark.removeItem(index)
         active_tab = self.disassembler.currentIndex()
@@ -303,7 +306,7 @@ class Recipe(QWidget):
                         if r.regions[k].start_ea == start_region and r.regions[k].end_ea == end_region:
                             matched = True
                             break
-                    
+
                     if matched:
                         # Calculate total bounds for this group to reset
                         total_start = min(reg.start_ea for reg in r.regions)
@@ -353,10 +356,10 @@ class Recipe(QWidget):
             for j, r in enumerate(list_regions):
                 for k, region_part in enumerate(r.regions):
                     intervals.append((region_part.start_ea, region_part.end_ea, i, j, k, r.name))
-        
+
         if not intervals:
             return False
-        
+
         # Sort by start, then by end
         intervals.sort(key=lambda x: (x[0], x[1]))
 
@@ -371,7 +374,7 @@ class Recipe(QWidget):
                 self.overlapping_regions.add((i, j, k, current_name, previous_name))
             else:
                 curr_end = end
-        
+
         if self.overlapping_regions:
             for region in self.overlapping_regions:
                 i, j, k, current_name, previous_name = region
@@ -416,7 +419,7 @@ class Recipe(QWidget):
                     index_bookmark = self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea)
                     if index_bookmark:
                         self.cmb_bookmark.removeItem(index_bookmark)
-                    
+
                     # patching
                     patch_bytes = bytes(reg.patch_bytes)
                     DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
@@ -453,7 +456,7 @@ class Recipe(QWidget):
             hidden_region = idaapi.get_hidden_range(cursor)
             if hidden_region:
                 color_insn = idaapi.get_hidden_range(cursor).color
-        
+
         # remove hidden range or patching
         if color_insn == Color.BG_PATCH_HIDDEN:
             found = False
@@ -489,10 +492,10 @@ class Recipe(QWidget):
                 possible_obfus = self.cmb_bookmark.itemText(i)
                 if possible_obfus in ('Scanning', 'Manual'):
                     continue
-                
+
                 # parse address start and end
                 try:
-                    parts = txt.split(' - ')
+                    parts = possible_obfus.split(' - ')
                     start_obfus = int(parts[0], 0)
                     end_obfus = int(parts[1], 0)
                 except (ValueError, IndexError):
