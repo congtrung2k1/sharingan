@@ -49,10 +49,10 @@ class JmpClean(Deobfuscator):
                     # check valid dest jump
                     while current_addr < found_addr + len_obfu_jump:
                         if not (start_binary < idc.get_operand_value(current_addr, 0) < end_binary):
-                            print(f'Invalid jmp {current_addr}')
+                            print(f"Invalid jmp {current_addr}")
                             is_valid_jmp = False
                             continue
-                        comment += f'{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n'
+                        comment += "{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n"
                         current_addr += len_obfu_jump // 2
 
                     if is_valid_jmp:

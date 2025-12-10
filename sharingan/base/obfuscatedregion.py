@@ -16,7 +16,7 @@ class ObfuscatedRegion:
     def __str__(self) -> str:
         lines = []
         for r in self.regions:
-            lines.append(f'{hex(r.start_ea)} - {r.end_ea} - {r.comment} - {r.patch_bytes}')
+            lines.append(f"{hex(r.start_ea)} - {r.end_ea} - {r.comment} - {r.patch_bytes}")
         return '\n'.join(lines)
 
 

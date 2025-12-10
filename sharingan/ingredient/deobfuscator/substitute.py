@@ -51,7 +51,7 @@ class Substitute(Deobfuscator):
         while start_obfu_addr < end_obfu_addr and start_obfu_addr != idaapi.BADADDR:
             if ida_bytes.is_code(ida_bytes.get_full_flags(start_obfu_addr)):
                 instr_size = idaapi.get_item_size(start_obfu_addr)
-                bytes_pattern_find_str += f'{DeobfuscateUtils.get_bytes_as_hex_string(start_obfu_addr, instr_size)} '
+                bytes_pattern_find_str += f"{DeobfuscateUtils.get_bytes_as_hex_string(start_obfu_addr, instr_size)} "
                 line_asm = idaapi.generate_disasm_line(start_obfu_addr, 0)
                 comment.append(line_asm)
             # if being data, convert to NOP

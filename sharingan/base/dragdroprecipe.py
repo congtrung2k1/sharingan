@@ -121,11 +121,11 @@ class DragDropRecipe(QListWidget):
 
         path_plugin = idaapi.get_ida_subdirs('plugins')
         if self.mode == 'deobfuscator':
-            target_module_name = f'sharingan.ingredient.deobfuscator.{algorithm_key}'
-            target_filename = os.path.join('sharingan', 'ingredient', 'deobfuscator', f'{algorithm_key}.py')
+            target_module_name = f"sharingan.ingredient.deobfuscator.{algorithm_key}"
+            target_filename = os.path.join('sharingan', 'ingredient', 'deobfuscator', f"{algorithm_key}.py")
         elif self.mode == 'decryption':
-            target_module_name = f'sharingan.ingredient.decryption.{algorithm_key}'
-            target_filename = os.path.join('sharingan', 'ingredient', 'decryption', f'{algorithm_key}.py')
+            target_module_name = f"sharingan.ingredient.decryption.{algorithm_key}"
+            target_filename = os.path.join('sharingan', 'ingredient', 'decryption', f"{algorithm_key}.py")
         found_class = None
 
         for path in path_plugin:

@@ -34,22 +34,22 @@ class ASMLine:
 
     @property
     def colored_address(self):
-        return idaapi.COLSTR(f'{self.address:08X}', idaapi.SCOLOR_PREFIX)
+        return idaapi.COLSTR(f"{self.address:08X}", idaapi.SCOLOR_PREFIX)
     
     @property
     def colored_label(self):
         if not self.label:
             return None
         pretty_name = idaapi.COLSTR(self.label, idaapi.SCOLOR_CNAME) + ':'
-        return f' {self.colored_address} {self.padding} {pretty_name}'
+        return f" {self.colored_address} {self.padding} {pretty_name}"
     
     @property
     def colored_blank(self):
-        return f' {self.colored_address}'
+        return f" {self.colored_address}"
 
     @property
     def colored_asmline(self):
-        return f' {self.colored_address} {self.padding} {self.colored_instruction}'
+        return f" {self.colored_address} {self.padding} {self.colored_instruction}"
     
 
 # option right click filter region like this
@@ -289,15 +289,15 @@ class ASMView(idaapi.simplecustviewer_t):
                     self.AddLine(body_before[i])
             elif tag == 'delete':
                 for i in range(i1, i2):
-                    self.AddLine(f'- {body_before[i]}')
+                    self.AddLine(f"- {body_before[i]}")
             elif tag == 'insert':
                 for i in range(j1, j2):
-                    self.AddLine(f'+ {body_after[i]}')
+                    self.AddLine(f"+ {body_after[i]}")
             elif tag == 'replace':
                 for i in range(i1, i2):
-                    self.AddLine(f'- {body_before[i]}')
+                    self.AddLine(f"- {body_before[i]}")
                 for i in range(j1, j2):
-                    self.AddLine(f'+ {body_after[i]}')
+                    self.AddLine(f"+ {body_after[i]}")
         
         self.Refresh()
 
@@ -337,7 +337,7 @@ class ASMView(idaapi.simplecustviewer_t):
                     current_ea = prev_start
                     while current_ea < prev_end:
                         line = ASMLine(current_ea)
-                        self.AddLine(f'+ {line.colored_asmline}')
+                        self.AddLine("+ {line.colored_asmline}")
                         current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
                     
                     idx += 1
@@ -347,7 +347,7 @@ class ASMView(idaapi.simplecustviewer_t):
                         next_start, next_end = -1, -1
             # CASE 1: print code in obfuscated region (before)
             if start != -1 and start <= current_addr < end:
-                self.AddLine(f'- {item['content']}')
+                self.AddLine(f"- {item['content']}")
                 is_diff = True
             
             # CASE 2: print current code (after)
@@ -359,7 +359,7 @@ class ASMView(idaapi.simplecustviewer_t):
                 current_ea = prev_start
                 while current_ea < prev_end:
                     line = ASMLine(current_ea)
-                    self.AddLine(f'+ {line.colored_asmline}')
+                    self.AddLine(f"+ {line.colored_asmline}")
                     current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
                 
                 idx += 1
@@ -370,7 +370,7 @@ class ASMView(idaapi.simplecustviewer_t):
 
                 # check two patched sequence region, prevent missing
                 if next_start != -1 and next_start <= current_addr < next_end:
-                        self.AddLine(f'- {item['content']}')
+                        self.AddLine("- {item['content']}")
                         is_diff = True
                 else:
                     # print normal code
@@ -481,7 +481,6 @@ class DisassembleTab(QWidget):
         self.tbl_string.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tbl_string.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tbl_string.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.tbl_string.setAlternatingRowColors(True)
         self.tbl_string.verticalHeader().setVisible(False)
         self.tbl_string.horizontalHeader().setStretchLastSection(False)
         self.tbl_string.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -631,7 +630,7 @@ class DisassembleTab(QWidget):
         try:
             results = self.string_finder.find_all_encrypted_strings()
         except Exception as exc:
-            idaapi.msg(f'[Sharingan] String scan failed: {exc}\n')
+            idaapi.msg(f"[Sharingan] String scan failed: {exc}\n")
         self.btn_scan_code.setEnabled(True)
         self.btn_scan_code.setText('Scan code')
         self.populate_string_table(results)
@@ -657,11 +656,11 @@ class DisassembleTab(QWidget):
             address = item.get('address', 0)
             preview_value = item.get('preview') or item.get('decrypted') or raw_value
             xref_list = item.get('xrefs') or []
-            xref_text = '\n'.join(f'0x{ea:08X}' for ea in xref_list) if xref_list else '0'
+            xref_text = '\n'.join(f"0x{ea:08X}" for ea in xref_list) if xref_list else '0'
 
             self.tbl_string.setItem(row, 1, idx_item)
             self.tbl_string.setItem(row, 2, self._make_table_item(raw_value, tooltip=raw_value))
-            self.tbl_string.setItem(row, 3, self._make_table_item(f'0x{address:08X}', align=Qt.AlignCenter))
+            self.tbl_string.setItem(row, 3, self._make_table_item(f"0x{address:08X}", align=Qt.AlignCenter))
             self.tbl_string.setItem(row, 4, self._make_table_item(preview_value))
             self.tbl_string.setItem(row, 5, self._make_table_item(xref_text))
             self._add_checkbox_to_row(row)
@@ -691,7 +690,7 @@ class DisassembleTab(QWidget):
         selected_set = set(selected_rows)
         remaining_results = [entry for idx, entry in enumerate(self.string_results) if idx not in selected_set]
         self.populate_string_table(remaining_results)
-        idaapi.msg(f'[Sharingan] Ignored {len(values_to_ignore)} string(s).\n')
+        idaapi.msg(f"[Sharingan] Ignored {len(values_to_ignore)} string(s).\n")
 
     def _append_ignore_strings(self, strings):
         store = getattr(self.string_finder, 'ignore_store', None)

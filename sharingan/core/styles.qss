@@ -1,10 +1,11 @@
 QWidget#list_operation {
     font-size: 22pt;
-    color: rgb(77, 134, 169);
+    color: rgb(60, 60, 60);
 }
 
 QListWidget#list_operation::item {
     border-bottom: 1px solid rgb(194, 231, 240);
+    background-color: rgb(220, 236, 246);
     padding: 10px;
 }
 
@@ -18,8 +19,8 @@ QListWidget#list_recipe::item:selected {
 }
 
 QLabel#header_ingredient_recipe {
-    font-weight: bold; 
-    font-size: 14pt;  
+    font-weight: bold;
+    font-size: 14pt;
     color: rgb(37, 37, 37);
 }
 

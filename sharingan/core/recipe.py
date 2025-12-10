@@ -228,7 +228,7 @@ class Recipe(QWidget):
                     is_start_in = self.start_ea <= reg.start_ea < self.end_ea
                     is_end_in = self.start_ea <= reg.end_ea <= self.end_ea
                     if not is_start_in or not is_end_in:
-                        print(f'Obfuscated region {hex(reg.start_ea)} - {hex(reg.end_ea)} outside current view')
+                        print(f"Obfuscated region {hex(reg.start_ea)} - {hex(reg.end_ea)} outside current view")
                 # check len found region to add bookmark
                 if len(r.regions) == 1:
                     self.append_bookmark(r.regions[0].start_ea, r.regions[0].end_ea, hint, is_scan=True)
@@ -309,7 +309,7 @@ class Recipe(QWidget):
                         total_start = min(reg.start_ea for reg in r.regions)
                         total_end = max(reg.end_ea for reg in r.regions)
                         DeobfuscateUtils.reset(total_start, total_end)
-                        print(f'Exclude region: {hex(total_start)} {hex(total_end)}')
+                        print(f"Exclude region: {hex(total_start)} {hex(total_end)}")
                         list_regions.pop(j)
                         return
 
@@ -322,18 +322,18 @@ class Recipe(QWidget):
 
     # classify bookmark scan or right click
     def append_bookmark(self, start_ea, end_ea, hint, is_scan=False):
-        ea_hint = f'{hex(start_ea)} - {hex(end_ea)} - {hint}'
+        ea_hint = f"{hex(start_ea)} - {hex(end_ea)} - {hint}"
         if is_scan:
             # plus two label header
             start_index_bookmark = self.count_manual_bookmark + 2
             end_index_bookmark = self.cmb_bookmark.count()
             if self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea):
-                print(f'Duplicate region - {hex(start_ea)} - {hex(end_ea)}')
+                print(f"Duplicate region - {hex(start_ea)} - {hex(end_ea)}")
                 return
             self.cmb_bookmark.addItem(ea_hint)
         else:
             if self.check_exist_bookmark(1, self.count_manual_bookmark + 1, start_ea, end_ea):
-                print(f'Already bookmark - {hex(start_ea)} - {hex(end_ea)}')
+                print(f"Already bookmark - {hex(start_ea)} - {hex(end_ea)}")
                 return
             self.cmb_bookmark.insertItem(self.count_manual_bookmark + 1, ea_hint)
             self.count_manual_bookmark += 1
@@ -377,7 +377,7 @@ class Recipe(QWidget):
                 i, j, k, current_name, previous_name = region
                 start_overlapping = self.obfuscated_regions[i][j].regions[k].start_ea
                 end_overlapping = self.obfuscated_regions[i][j].regions[k].end_ea
-                print(f'Overlap: {hex(start_overlapping)} - {hex(end_overlapping)} - {current_name} - {previous_name}')
+                print(f"Overlap: {hex(start_overlapping)} - {hex(end_overlapping)} - {current_name} - {previous_name}")
             return True
         return False
 
@@ -473,7 +473,7 @@ class Recipe(QWidget):
                             DeobfuscateUtils.reset(start_ea, end_ea)
 
                             # remove from bookmark
-                            print(f'Revert region: {hex(start_ea)} {hex(end_ea)}')
+                            print(f"Revert region: {hex(start_ea)} {hex(end_ea)}")
                             list_regions.pop(j)
 
                             # refresh asmview

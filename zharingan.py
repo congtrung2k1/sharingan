@@ -34,20 +34,20 @@ class Sharingan(idaapi.plugin_t):
         idaapi.msg("=" * 80 + "\nSharingan initialized!!!\n" + "=" * 80 + "\n")
         self.hook_menu = InitHookMenu()
         return idaapi.PLUGIN_KEEP
-    
+
     def run(self, arg):
         """Run the IDA plugin."""
         if PluginPanel.current_instance is not None:
             idaapi.msg("Sharingan is already running! Please check the opened tab.\n")
             return
-        
+
         idaapi.msg('Running ' + self.wanted_name + '\n')
         self.sharingan_gui = PluginPanel()
         self.sharingan_gui.Show('Sharingan')
         ManageStyleSheet.load_stylesheet()
         recipe = self.sharingan_gui.main_layout.recipe
         self.hook_menu.register_recipe(recipe)
-    
+
     def term(self):
         flush_user_ignore_to_bundle()
         self.hook_menu.cleanup()

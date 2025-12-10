@@ -137,7 +137,7 @@ class FLOSSStringExtractor:
             results.append({
                 'address': addr,
                 'value': val,
-                'type': f'{seg_type}-ascii',
+                'type': f"{seg_type}-ascii",
                 'segment': name,
                 'encoding': 'ascii',
                 'xrefs': xrefs,
@@ -160,7 +160,7 @@ class FLOSSStringExtractor:
             results.append({
                 'address': addr,
                 'value': val,
-                'type': f'{seg_type}-unicode',
+                'type': f"{seg_type}-unicode",
                 'segment': name,
                 'encoding': 'utf-16le',
                 'xrefs': xrefs,

@@ -63,19 +63,19 @@ class StringFinder:
         
         # Static strings (raw segment scan)
         static_strings = self.extractor.extract_static_strings()
-        print(f'Found {len(static_strings)} static strings')
+        print(f"Found {len(static_strings)} static strings")
         results.extend(static_strings)
         
         # Stack strings (constructed on stack)
         stack_strings = self.extractor.extract_stack_strings()
-        print(f'Found {len(stack_strings)} stack strings')
+        print(f"Found {len(stack_strings)} stack strings")
         for s in stack_strings:
             s['xref_count'] = len(s.get('xrefs', []))
             results.append(s)
         
         # Tight strings (push immediate sequences)
         tight_strings = self.extractor.extract_tight_strings()
-        print(f'Found {len(tight_strings)} tight strings')
+        print(f"Found {len(tight_strings)} tight strings")
         for s in tight_strings:
             s['xref_count'] = len(s.get('xrefs', []))
             results.append(s)
@@ -147,7 +147,7 @@ class StringFinder:
                 results.append({
                     'value': string_value,
                     'address': s.ea,
-                    'type': f'high-entropy ({entropy:.2f})',
+                    'type': f"high-entropy ({entropy:.2f})",
                     'xrefs': xrefs,
                     'xref_count': len(xrefs)
                 })

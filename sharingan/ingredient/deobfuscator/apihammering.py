@@ -95,7 +95,7 @@ class APIHammering(Deobfuscator):
                         idaapi.set_cmt(addr_call, 'Manually patch push instruction',0)
                         break
                     elif DeobfuscateUtils.is_mov(prev_addr):
-                        print(f'Maybe push {hex(prev_addr)}')
+                        print(f"Maybe push {hex(prev_addr)}")
                         pass
                 self.possible_obfuscation_regions.append(possible_region)
             else:
