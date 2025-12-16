@@ -261,22 +261,49 @@ class Recipe(QWidget):
 
     # manip data in table of string mode in module disassembler
     def preview_decryption(self):
-        for i in range(self.list_recipe.count()):
-            item = self.list_recipe.item(i)
-            ingredient = self.list_recipe.itemWidget(item)
+        pipeline = self._get_active_decryption_pipeline()
+        if not pipeline:
+            print("No active decryption ingredients.")
+            return
 
-            # skip disable
-            if ingredient.chk_active.isChecked():
-                print(ingredient.name, 'disable')
+        selected_indices = self.disassembler.get_selected_string_indices()
+        if not selected_indices:
+            print("No selected strings to decrypt.")
+            return
+
+        tbl_string = getattr(self.disassembler, "tbl_string", None)
+        if tbl_string is None or not isinstance(tbl_string, list):
+            print("tbl_string not available in disassembler.")
+            return
+
+        selection_meta = []
+        raw_values = []
+        for idx in selected_indices:
+            if not (0 <= idx < len(tbl_string)):
+                print(f"Selection index {idx} is out of range.")
                 continue
+            entry = tbl_string[idx]
+            if isinstance(entry, (tuple, list)) and len(entry) > 0:
+                raw = entry[0]
+                ea = entry[1] if len(entry) > 1 else None
+            else:
+                raw = entry
+                ea = None
+            raw_values.append(raw)
+            selection_meta.append((idx, ea))
 
-            # check mode
-            if not isinstance(ingredient, Decryption):
-                print(ingredient.name, 'wrong mode')
-                return
+        if not raw_values:
+            print("No valid strings selected for preview.")
+            return
 
-            print('Done', ingredient.description)
-            ingredient.preview()
+        decrypted_values = self.run_decryption(raw_values, pipeline=pipeline) or raw_values
+
+        for (row_idx, ea), preview_value in zip(selection_meta, decrypted_values):
+            updated = False
+            if ea is not None and hasattr(self.disassembler, "update_preview_at_location"):
+                updated = self.disassembler.update_preview_at_location(ea, preview_value)
+            if not updated and hasattr(self.disassembler, "update_preview_for_row"):
+                self.disassembler.update_preview_for_row(row_idx, preview_value)
 
     def _get_active_decryption_pipeline(self):
         pipeline = []
@@ -289,8 +316,8 @@ class Recipe(QWidget):
                 pipeline.append(widget)
         return pipeline
 
-    def run_decryption(self, raw_values):
-        pipeline = self._get_active_decryption_pipeline()
+    def run_decryption(self, raw_values, pipeline=None):
+        pipeline = pipeline or self._get_active_decryption_pipeline()
         if not raw_values:
             return []
         if not pipeline:
@@ -300,13 +327,13 @@ class Recipe(QWidget):
             current = raw
             for step in pipeline:
                 try:
-                    print('before decrypt', current)
                     current = step.decrypt(current)
-                    print('after decrypt', current)
                 except Exception as exc:
                     print(f"{step.name} decrypt failed: {exc}")
                     break
+                print('Done', step)
             results.append(current)
+            
         return results
 
     def preview(self):

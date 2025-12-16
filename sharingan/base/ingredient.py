@@ -105,10 +105,6 @@ class Decryption(Ingredient):
     def decrypt(self, raw):
         raise NotImplementedError('Must be implement method decrypt')
 
-    @abstractmethod
-    def preview(self):
-        raise NotImplementedError('Must be implement method preview')
-
     def _rotl(value: int, shift: int, width: int = 8) -> int:
         if width <= 0:
             return value
