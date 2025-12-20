@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QC
 from PySide6.QtCore import Qt, Signal, QObject
 from sharingan.base.dragdroprecipe import DragDropRecipe
 from sharingan.core.stylesmanager import ManageStyleSheet
-from sharingan.core.utils import DeobfuscateUtils
+from sharingan.core.utils import DeobfuscateUtils, Color
 from sharingan.base.ingredient import Decryption, Deobfuscator
 from sharingan.base.obfuscatedregion import Action, ListObfuscatedRegion
 import ida_bytes, idaapi, idc
@@ -57,13 +57,6 @@ class PatchedBytesVistor(object):
 # signal for filter action in asmview
 class FilterSignal(QObject):
     filter_ = Signal(int, int)
-
-
-class Color:
-    DEFCOLOR = 0xFFFFFFFF                  # remove color
-    BG_HINT = 0x8bab53                     # green: hint
-    BG_OVERLAPPING = 0x4a6afb              # red: overlap
-    BG_PATCH_HIDDEN = 0xbd8231             # blue: patch/hidden range
 
 
 class Recipe(QWidget):
@@ -158,7 +151,7 @@ class Recipe(QWidget):
 
         self.obfuscated_regions.clear()
         active_index = self.disassembler.currentIndex()
-        self.disassembler.refresh_tab_asmview(active_index)
+        self.disassembler.clear_tab_asmview(active_index)
         print('Reset all')
 
     # delete item in list recipe
@@ -228,6 +221,7 @@ class Recipe(QWidget):
                 return
             print('Done', ingredient.description)
 
+            is_clear_bookmark = False
             self.obfuscated_regions.append(found_regions)
             for r in found_regions:
                 hint = ingredient.description
@@ -238,6 +232,9 @@ class Recipe(QWidget):
                     is_end_in = self.start_ea <= reg.end_ea <= self.end_ea
                     if not is_start_in or not is_end_in:
                         print(f"Obfuscated region {hex(reg.start_ea)} - {hex(reg.end_ea)} outside current view")
+                    if is_start_in and is_end_in and not is_clear_bookmark:
+                        is_clear_bookmark = True
+                        DeobfuscateUtils.reset(self.start_ea, self.end_ea)
                 # check len found region to add bookmark
                 if len(r.regions) == 1:
                     self.append_bookmark(r.regions[0].start_ea, r.regions[0].end_ea, hint, is_scan=True)
@@ -312,6 +309,9 @@ class Recipe(QWidget):
             if not item:
                 continue
             widget = self.list_recipe.itemWidget(item)
+            if not isinstance(widget, Decryption):
+                print('Wrong mode')
+                return
             if isinstance(widget, Decryption) and not widget.chk_active.isChecked():
                 pipeline.append(widget)
         return pipeline
@@ -333,7 +333,7 @@ class Recipe(QWidget):
                     break
                 print('Done', step)
             results.append(current)
-            
+
         return results
 
     def preview(self):
@@ -343,9 +343,20 @@ class Recipe(QWidget):
             self.preview_decryption()
 
     # delete selected item combobox
-    def resolve(self):
-        index = self.cmb_bookmark.currentIndex()
-        selection = self.cmb_bookmark.itemText(index)
+    def resolve(self, exclude_addr=0):
+        index = -1
+        selection = str()
+        if not exclude_addr:
+            index = self.cmb_bookmark.currentIndex()
+            selection = self.cmb_bookmark.itemText(index)
+        else:
+            end_index = self.count_manual_bookmark - 1
+            for i in range(end_index, 0, -1):
+                start_region, end_region = self.parse_start_end_region(i)
+                if start_region <= exclude_addr <= end_region:
+                    index = i
+                    selection = self.cmb_bookmark.itemText(index)
+                    break
 
         if index == -1 or selection in ('Scanning', 'Manual'):
             return
@@ -354,11 +365,11 @@ class Recipe(QWidget):
         self.cmb_bookmark.removeItem(index)
         active_tab = self.disassembler.currentIndex()
         self.disassembler.clear_tab_asmview(active_tab)
+        DeobfuscateUtils.reset(start_region, end_region)
 
-        if 0 < index < self.count_manual_bookmark:
+        if 0 < index <= self.count_manual_bookmark:
             self.count_manual_bookmark -= 1
         else:
-            DeobfuscateUtils.reset(start_region, end_region)
             # Iterate backwards to safely pop from list
             for i in range(len(self.obfuscated_regions) - 1, -1, -1):
                 list_regions = self.obfuscated_regions[i]
@@ -391,7 +402,7 @@ class Recipe(QWidget):
     def append_bookmark(self, start_ea, end_ea, hint, is_scan=False):
         ea_hint = f"{hex(start_ea)} - {hex(end_ea)} - {hint}"
         if is_scan:
-            # plus two label header
+            # skip two label header
             start_index_bookmark = self.count_manual_bookmark + 2
             end_index_bookmark = self.cmb_bookmark.count()
             if self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea):
@@ -402,16 +413,19 @@ class Recipe(QWidget):
             if self.check_exist_bookmark(1, self.count_manual_bookmark + 1, start_ea, end_ea):
                 print(f"Already bookmark - {hex(start_ea)} - {hex(end_ea)}")
                 return
-            self.cmb_bookmark.insertItem(self.count_manual_bookmark + 1, ea_hint)
             self.count_manual_bookmark += 1
+            self.cmb_bookmark.insertItem(self.count_manual_bookmark, ea_hint)
+            DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_BOOKMARK)
 
-    def disassemble_range_addr(self):
+    def disassemble_range_addr(self, index):
         start_region, end_region = self.parse_start_end_region(self.cmb_bookmark.currentIndex())
         if start_region == 0 or end_region == 0:
             return
 
+        if self.chk_compact.isChecked():
+            idc.jumpto(start_region)
         active_index = self.disassembler.currentIndex()
-        self.disassembler.set_tab_line_edit_texts(active_index, start_region, end_region)
+        self.disassembler.set_tab_line_edit_texts(active_index, start_region, end_region, index, self.count_manual_bookmark)
 
     # Flatten all sub-regions with their locations
     def check_overlapping_regions(self):
@@ -475,9 +489,9 @@ class Recipe(QWidget):
         for list_regions in self.obfuscated_regions:
             for r in list_regions:
                 for reg in r.regions:
-                    if Action.CMT:
+                    if reg.action == Action.CMT:
                         idaapi.set_cmt(reg.start_ea, reg.comment, 0)
-                    elif Action.PATCH:
+                    elif reg.action == Action.PATCH:
                         start_ea = reg.start_ea
                         end_ea = reg.end_ea
                         start_index_bookmark = self.count_manual_bookmark + 2
@@ -571,6 +585,7 @@ class Recipe(QWidget):
                 # remove from bookmark and reset color
                 if start_obfus <= cursor < end_obfus:
                     self.cmb_bookmark.removeItem(i)
-                    DeobfuscateUtils.color_range(start_obfus, end_obfus, Color.DEFCOLOR)
-                    DeobfuscateUtils.mark_as_code(start_obfus, end_obfus)
+                    DeobfuscateUtils.reset(start_obfus, end_obfus)
                     return
+        elif color_insn == Color.BG_BOOKMARK:
+            self.resolve(cursor)

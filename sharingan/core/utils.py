@@ -1,14 +1,23 @@
-import idaapi
-import ida_bytes
-import idc
 import string
+
+import ida_bytes
+import idaapi
+import idc
+
+
+class Color:
+    DEFCOLOR = 0xFFFFFFFF               # remove color
+    BG_PATCH_HIDDEN = 0x8BAB53          # green: hint
+    BG_OVERLAPPING = 0x4A6AFB           # red: overlap
+    BG_HINT = 0xC19F6E                  # blue: patch/hidden range
+    BG_BOOKMARK = 0x3059AD              # brown: bookmark
 
 
 class DeobfuscateUtils:
     @staticmethod
     def get_bytes_as_hex_string(addr, size):
         bytes_data = ida_bytes.get_bytes(addr, size)
-        return ' '.join([f"{b:02x}" for b in bytes_data])
+        return " ".join([f"{b:02x}" for b in bytes_data])
 
     @staticmethod
     def mark_as_code(start_addr, end_addr):
@@ -30,19 +39,31 @@ class DeobfuscateUtils:
         if not is_expand:
             ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE, length)
         else:
-            ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE | ida_bytes.DELIT_EXPAND, length)
+            ida_bytes.del_items(
+                addr, ida_bytes.DELIT_SIMPLE | ida_bytes.DELIT_EXPAND, length
+            )
         idaapi.auto_wait()
 
     @staticmethod
     def compile_pattern_search(bytes_pattern_str):
         image_base = idaapi.get_imagebase()
         compiled_pattern = ida_bytes.compiled_binpat_vec_t()
-        err = ida_bytes.parse_binpat_str(compiled_pattern, image_base, bytes_pattern_str, 16)
+        err = ida_bytes.parse_binpat_str(
+            compiled_pattern, image_base, bytes_pattern_str, 16
+        )
         return compiled_pattern
 
     @staticmethod
+    def is_nop(addr):
+        if not idaapi.is_head(idaapi.get_flags(ea)):
+            return False
+        instr = idaapi.insn_t()
+        idaapi.decode_insn(instr, addr)
+        return instr.itype == idaapi.NN_nop
+
+    @staticmethod
     def is_jmp(addr):
-        return idc.print_insn_mnem(addr).startswith('j')
+        return idc.print_insn_mnem(addr).startswith("j")
 
     @staticmethod
     def is_call(addr):
@@ -52,19 +73,19 @@ class DeobfuscateUtils:
         return instr.itype in call_insn or idaapi.is_call_insn(instr)
 
     @staticmethod
-    def is_push(addr) :
+    def is_push(addr):
         instr = idaapi.insn_t()
         idaapi.decode_insn(instr, addr)
         return instr.itype == idaapi.NN_push
 
     @staticmethod
-    def is_mov(addr) :
+    def is_mov(addr):
         instr = idaapi.insn_t()
         idaapi.decode_insn(instr, addr)
         return instr.itype == idaapi.NN_mov
 
     @staticmethod
-    def is_nop(addr) :
+    def is_nop(addr):
         instr = idaapi.insn_t()
         idaapi.decode_insn(instr, addr)
         return instr.itype == idaapi.NN_nop

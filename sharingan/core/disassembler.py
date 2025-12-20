@@ -1,14 +1,40 @@
-from PySide6.QtWidgets import QApplication, QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QComboBox, QTableWidget, QTableWidgetItem, QStackedWidget, QHeaderView, QAbstractItemView, QCheckBox, QToolButton, QMenu
-from PySide6.QtGui import QAction
+import difflib
+import os
+import platform
+import threading
+
+import ida_bytes
+import ida_hexrays
+import ida_kernwin
+import idaapi
 from PySide6.QtCore import Qt, QTimer
-from sharingan.core.stylesmanager import ManageStyleSheet
-import idaapi, ida_bytes, ida_hexrays, ida_kernwin
-import threading, platform, difflib, os
-from sharingan.core.utils import DeobfuscateUtils
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QPushButton,
+    QSizePolicy,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
+
 from sharingan.core.StrFinder.string_finder import StringFinder
+from sharingan.core.stylesmanager import ManageStyleSheet
+from sharingan.core.utils import Color, DeobfuscateUtils
 
-
-FILTER_ACTION_NAME = 'sharingan:filter'
+FILTER_ACTION_NAME = "sharingan:filter"
 
 
 class DBHook(idaapi.IDB_Hooks):
@@ -19,12 +45,26 @@ class DBHook(idaapi.IDB_Hooks):
     def byte_patched(self, ea, old_value):
         pass
 
-    # highlight hint in asmview
+    # highlight hint in asm_view
     def item_color_changed(self, ea, color):
+        idx_line = set()
+        if self.asm_view.mode == "decompiler":
+            if ea in self.asm_view.eamap:
+                items = self.asm_view.eamap[ea]
+                for item in items:
+                    if item.ea == ea:
+                        coords = self.asm_view.cfunc.find_item_coords(item)
+                        if coords:
+                            _, y = coords
+                            idx_line.add(y)
+
         if ea in self.asm_view.addr_asm_highlight:
             self.asm_view.addr_asm_highlight.remove(ea)
-        else:
-            self.asm_view.addr_asm_highlight.append(ea)
+            self.asm_view.addr_pseudo_highlight ^= idx_line
+        elif color != Color.BG_BOOKMARK and color != Color.DEFCOLOR:
+            self.asm_view.addr_asm_highlight.add(ea)
+            print(self.asm_view.addr_asm_highlight)
+            self.asm_view.addr_pseudo_highlight |= idx_line
 
 
 # color asm line
@@ -32,7 +72,7 @@ class ASMLine:
     def __init__(self, ea):
         self.label = idaapi.get_short_name(ea)
         self.address = ea
-        self.padding = ' ' * 2
+        self.padding = " " * 2
 
         flags = idaapi.get_flags(ea)
 
@@ -45,8 +85,9 @@ class ASMLine:
             s_val = f"{byte_val:02X}h"
 
             self.colored_instruction = (
-                idaapi.COLSTR("db", idaapi.SCOLOR_KEYWORD) + " " +
-                idaapi.COLSTR(s_val, idaapi.SCOLOR_DNUM)
+                idaapi.COLSTR("db", idaapi.SCOLOR_KEYWORD)
+                + " "
+                + idaapi.COLSTR(s_val, idaapi.SCOLOR_DNUM)
             )
 
     @property
@@ -57,7 +98,7 @@ class ASMLine:
     def colored_label(self):
         if not self.label:
             return None
-        pretty_name = idaapi.COLSTR(self.label, idaapi.SCOLOR_CNAME) + ':'
+        pretty_name = idaapi.COLSTR(self.label, idaapi.SCOLOR_CNAME) + ":"
         return f" {self.colored_address} {self.padding} {pretty_name}"
 
     @property
@@ -142,7 +183,14 @@ class ASMView(idaapi.simplecustviewer_t):
         self.lines_pseudocode_before = []
         self.lines_pseudocode_before_raw = []
         self.lines_asm_before = []
-        self.addr_asm_highlight = []
+        self.addr_asm_highlight = set()
+        self.addr_pseudo_highlight = set()
+
+        self.cfunc = None
+        self.eamap = None
+
+        self.idx_bookmark = 0
+        self.count_manual_bookmark = 0
 
         self.db_hook = DBHook(self)
         self.db_hook.hook()
@@ -155,8 +203,12 @@ class ASMView(idaapi.simplecustviewer_t):
 
         # re-register action to prevent duplicate option
         idaapi.unregister_action(FILTER_ACTION_NAME)
-        action_filter = idaapi.action_desc_t(FILTER_ACTION_NAME, 'Filter', self.filter, None, None)
-        assert idaapi.register_action(action_filter), ' Action filter registration failed'
+        action_filter = idaapi.action_desc_t(
+            FILTER_ACTION_NAME, "Filter", self.filter, None, None
+        )
+        assert idaapi.register_action(action_filter), (
+            " Action filter registration failed"
+        )
 
         self._twidget = self.GetWidget()
         self.widget = idaapi.PluginForm.TWidgetToPyQtWidget(self._twidget)
@@ -180,19 +232,16 @@ class ASMView(idaapi.simplecustviewer_t):
                 self.AddLine(line.colored_blank)
                 self.AddLine(line.colored_label)
                 # backup to diff
-                self.lines_asm_before.append({
-                    'addr': next_addr,
-                    'content': line.colored_blank
-                })
-                self.lines_asm_before.append({
-                    'addr': next_addr,
-                    'content': line.colored_label
-                })
+                self.lines_asm_before.append(
+                    {"addr": next_addr, "content": line.colored_blank}
+                )
+                self.lines_asm_before.append(
+                    {"addr": next_addr, "content": line.colored_label}
+                )
             self.AddLine(line.colored_asmline)
-            self.lines_asm_before.append({
-                'addr': next_addr,
-                'content': line.colored_asmline
-            })
+            self.lines_asm_before.append(
+                {"addr": next_addr, "content": line.colored_asmline}
+            )
             # add data if found
             flags = idaapi.get_flags(next_addr)
             if idaapi.is_head(flags):
@@ -209,17 +258,18 @@ class ASMView(idaapi.simplecustviewer_t):
         self.lines_pseudocode_before_raw.clear()
 
         if not ida_hexrays.init_hexrays_plugin():
-            print('Fail init decompiler')
+            print("Fail init decompiler")
             return
         func = idaapi.get_func(start_ea)
         if func is None:
             print("Please provid address within a function")
             return
-        cfunc = ida_hexrays.decompile(func)
-        if cfunc is None:
+        self.cfunc = ida_hexrays.decompile(func)
+        self.eamap = self.cfunc.get_eamap()
+        if self.cfunc is None:
             print("Failed to decompile!")
             return
-        pseudocode = cfunc.get_pseudocode()
+        pseudocode = self.cfunc.get_pseudocode()
         self.ClearLines()
         for sline in pseudocode:
             self.AddLine(sline.line)
@@ -232,26 +282,39 @@ class ASMView(idaapi.simplecustviewer_t):
         self.filter.set_signal_filter(signal_filter)
 
     def popup_option_filter(self, widget, popup, ctx):
-        if self.mode == 'disassembler':
-           idaapi.attach_action_to_popup(widget, popup, FILTER_ACTION_NAME, None, 0)
+        if self.mode == "disassembler":
+            idaapi.attach_action_to_popup(widget, popup, FILTER_ACTION_NAME, None, 0)
 
     def highlight_diff_lines(self, out, widget, info):
         if widget != self._twidget:
             return
         for _, line in enumerate(info.sections_lines[0]):
+            color = None
             splace = idaapi.place_t_as_simpleline_place_t(line.at)
+            abs_line_idx = splace.n
             line_info = self.GetLine(splace.n)
             if not line_info:
                 continue
             colored_line, _, _ = line_info
-            if colored_line.startswith('-'):
-                color = idaapi.CK_EXTRA11
-            elif colored_line.startswith('+'):
-                color = idaapi.CK_EXTRA1
-            else:
-                raw_line = idaapi.tag_remove(colored_line)
-                address = int(raw_line.split()[0], 16)
-                if address in self.addr_asm_highlight:
+
+            if self.mode == 'disassembler':
+                if colored_line.startswith("-"):
+                    color = idaapi.CK_EXTRA11
+                elif colored_line.startswith("+"):
+                    color = idaapi.CK_EXTRA1
+                else:
+                    raw_line = idaapi.tag_remove(colored_line)
+                    address = int(raw_line.split()[0], 16)
+                    if address in self.addr_asm_highlight and self.idx_bookmark <= self.count_manual_bookmark:
+                        color = idaapi.CK_EXTRA6
+                    else:
+                        continue
+            elif self.mode == 'decompiler':
+                if colored_line.startswith("-"):
+                    color = idaapi.CK_EXTRA11
+                elif colored_line.startswith("+"):
+                    color = idaapi.CK_EXTRA1
+                elif abs_line_idx in self.addr_pseudo_highlight and self.idx_bookmark <= self.count_manual_bookmark:
                     color = idaapi.CK_EXTRA6
                 else:
                     continue
@@ -270,8 +333,12 @@ class ASMView(idaapi.simplecustviewer_t):
 
         # return parts header, body of color and raw line
         if sep_index != -1:
-            return (colored_lines[:sep_index+1], colored_lines[sep_index+1:],
-                    raw_lines[:sep_index+1], raw_lines[sep_index+1:])
+            return (
+                colored_lines[: sep_index + 1],
+                colored_lines[sep_index + 1 :],
+                raw_lines[: sep_index + 1],
+                raw_lines[sep_index + 1 :],
+            )
         else:
             # not found empty line, return all
             return [], colored_lines, [], raw_lines
@@ -300,26 +367,32 @@ class ASMView(idaapi.simplecustviewer_t):
         self.ClearLines()
 
         # split parts
-        _, body_before, _, body_before_raw = self.split_header_body(self.lines_pseudocode_before_raw, self.lines_pseudocode_before)
-        header_after, body_after, _, body_after_raw = self.split_header_body(lines_pseudocode_after_raw, lines_pseudocode_after)
+        _, body_before, _, body_before_raw = self.split_header_body(
+            self.lines_pseudocode_before_raw, self.lines_pseudocode_before
+        )
+        header_after, body_after, _, body_after_raw = self.split_header_body(
+            lines_pseudocode_after_raw, lines_pseudocode_after
+        )
 
         # print header after
         for line in header_after:
             self.AddLine(line)
 
         # diff
-        matcher = difflib.SequenceMatcher(None, body_before_raw, body_after_raw, autojunk=False)
+        matcher = difflib.SequenceMatcher(
+            None, body_before_raw, body_after_raw, autojunk=False
+        )
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-            if tag == 'equal':
+            if tag == "equal":
                 for i in range(i1, i2):
                     self.AddLine(body_before[i])
-            elif tag == 'delete':
+            elif tag == "delete":
                 for i in range(i1, i2):
                     self.AddLine(f"- {body_before[i]}")
-            elif tag == 'insert':
+            elif tag == "insert":
                 for i in range(j1, j2):
                     self.AddLine(f"+ {body_after[i]}")
-            elif tag == 'replace':
+            elif tag == "replace":
                 for i in range(i1, i2):
                     self.AddLine(f"- {body_before[i]}")
                 for i in range(j1, j2):
@@ -339,42 +412,21 @@ class ASMView(idaapi.simplecustviewer_t):
         self.ClearLines()
         is_diff = False
         idx = 0
+        last_was_nop = False
 
         for item in self.lines_asm_before:
-            # current_addr = int(item['addr'], 16)
-            current_addr = item['addr']
+            current_addr = item["addr"]
 
             if idx < len(intervals):
                 start, end = intervals[idx]
             else:
                 start, end = -1, -1
 
-                # CASE 1: print code in obfuscated region (before)
-                if start != -1 and start <= current_addr < end:
-                    self.AddLine(f"- {item['content']}")
-                    is_diff = True
-
-                # CASE 2: print current code (after)
-                elif is_diff and (start == -1 or current_addr >= end):
-                    is_diff = False
-
-                    # print deobfuscated code
-                    prev_start, prev_end = intervals[idx]
-                    current_ea = prev_start
-                    while current_ea < prev_end:
-                        line = ASMLine(current_ea)
-                        self.AddLine("+ {line.colored_asmline}")
-                        current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
-
-                    idx += 1
-                    if idx < len(intervals):
-                        next_start, next_end = intervals[idx]
-                    else:
-                        next_start, next_end = -1, -1
             # CASE 1: print code in obfuscated region (before)
             if start != -1 and start <= current_addr < end:
                 self.AddLine(f"- {item['content']}")
                 is_diff = True
+                last_was_nop = False
 
             # CASE 2: print current code (after)
             elif is_diff and (start == -1 or current_addr >= end):
@@ -384,8 +436,12 @@ class ASMView(idaapi.simplecustviewer_t):
                 prev_start, prev_end = intervals[idx]
                 current_ea = prev_start
                 while current_ea < prev_end:
-                    line = ASMLine(current_ea)
-                    self.AddLine(f"+ {line.colored_asmline}")
+                    current_is_nop = DeobfuscateUtils.is_nop(current_ea)
+                    if not (current_is_nop and last_was_nop):
+                        line = ASMLine(current_ea)
+                        self.AddLine(f"+ {line.colored_asmline}")
+
+                    last_was_nop = current_is_nop
                     current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
 
                 idx += 1
@@ -396,20 +452,31 @@ class ASMView(idaapi.simplecustviewer_t):
 
                 # check two patched sequence region, prevent missing
                 if next_start != -1 and next_start <= current_addr < next_end:
-                        self.AddLine("- {item['content']}")
-                        is_diff = True
+                    self.AddLine(f"- {item['content']}")
+                    is_diff = True
+                    last_was_nop = False
                 else:
                     # print normal code
-                    self.AddLine(item['content'])
+                    self.AddLine(item["content"])
             # CASE 3: equal
             else:
-                self.AddLine(item['content'])
+                self.AddLine(item["content"])
+
+        if is_diff and idx < len(intervals):
+            is_diff = False
+            prev_start, prev_end = intervals[idx]
+            current_ea = prev_start
+            while current_ea < prev_end:
+                line = ASMLine(current_ea)
+                self.AddLine(f"+ {line.colored_asmline}")
+                current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
+
         self.Refresh()
 
     def diff_code(self, obfuscated_regions):
-        if self.mode == 'decompiler':
+        if self.mode == "decompiler":
             self.diff_decompiler()
-        elif self.mode == 'disassembler':
+        elif self.mode == "disassembler":
             self.diff_disassembler(obfuscated_regions)
 
 
@@ -428,7 +495,7 @@ class DisassembleTab(QWidget):
         self.cached_start_ea = None
         self.cached_end_ea = None
         self.mutex = threading.Lock()
-        self.mode = 'disassembler'
+        self.mode = "disassembler"
         self.string_results = []
         self.string_row_checkboxes = []
         self._last_checkbox_row = None
@@ -442,24 +509,24 @@ class DisassembleTab(QWidget):
         self.setup_ui()
 
     def setup_ui(self):
-        self.lbl_start_ea = QLabel('Start EA')
-        self.lbl_end_ea = QLabel('End EA')
+        self.lbl_start_ea = QLabel("Start EA")
+        self.lbl_end_ea = QLabel("End EA")
         self.ldt_start_ea = QLineEdit()
         self.ldt_end_ea = QLineEdit()
-        self.ldt_start_ea.setPlaceholderText('Start')
-        self.ldt_end_ea.setPlaceholderText('End')
+        self.ldt_start_ea.setPlaceholderText("Start")
+        self.ldt_end_ea.setPlaceholderText("End")
         self.ldt_start_ea.editingFinished.connect(self.switch_mode_display)
         self.ldt_end_ea.editingFinished.connect(self.switch_mode_display)
-        self.btn_choose = QPushButton('Choose', parent=self)
+        self.btn_choose = QPushButton("Choose", parent=self)
         self.btn_choose.clicked.connect(self.choose_function)
         self.cmb_mode = QComboBox()
-        self.cmb_mode.addItem('Disassembler')
-        self.cmb_mode.addItem('Decompiler')
-        self.cmb_mode.addItem('String')
+        self.cmb_mode.addItem("Disassembler")
+        self.cmb_mode.addItem("Decompiler")
+        self.cmb_mode.addItem("String")
         self.cmb_mode.currentIndexChanged.connect(self.change_mode_code_string)
 
         self.asm_view = ASMView()
-        assert self.asm_view.Create('asm_view', self.mode), 'Fail loading ASMView'
+        assert self.asm_view.Create("asm_view", self.mode), "Fail loading ASMView"
         self.string_workspace = self._initialize_string_workspace()
 
         layout_toolbar = QHBoxLayout()
@@ -488,9 +555,9 @@ class DisassembleTab(QWidget):
         layout = QVBoxLayout(workspace)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.btn_scan_code = QPushButton('Scan code', self)
+        self.btn_scan_code = QPushButton("Scan code", self)
         self.btn_scan_code.clicked.connect(self.scan_code_strings)
-        self.btn_ignore_strings = QPushButton('Ignore', self)
+        self.btn_ignore_strings = QPushButton("Ignore", self)
         self.btn_ignore_strings.clicked.connect(self.ignore_selected_strings)
 
         button_bar = QHBoxLayout()
@@ -501,16 +568,24 @@ class DisassembleTab(QWidget):
 
         self.tbl_string = QTableWidget()
         self.tbl_string.setColumnCount(6)
-        self.tbl_string.setHorizontalHeaderLabels(['', '#', 'Raw', 'Address', 'Preview', 'Xref'])
+        self.tbl_string.setHorizontalHeaderLabels(
+            ["", "#", "Raw", "Address", "Preview", "Xref"]
+        )
         self.tbl_string.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tbl_string.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tbl_string.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_string.verticalHeader().setVisible(False)
         self.tbl_string.horizontalHeader().setStretchLastSection(False)
-        self.tbl_string.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.tbl_string.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.tbl_string.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeToContents
+        )
+        self.tbl_string.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeToContents
+        )
         self.tbl_string.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.tbl_string.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.tbl_string.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeToContents
+        )
         self.tbl_string.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.tbl_string.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
 
@@ -523,15 +598,19 @@ class DisassembleTab(QWidget):
         self.checkbox_header_button = QToolButton(self.checkbox_header_container)
         self.checkbox_header_button.setAutoRaise(True)
         self.checkbox_header_button.setCursor(Qt.PointingHandCursor)
-        self.checkbox_header_button.setToolTip('Toggle all selections')
+        self.checkbox_header_button.setToolTip("Toggle all selections")
         self.checkbox_header_button.clicked.connect(self._handle_header_checkbox_button)
         container_layout.addWidget(self.checkbox_header_button)
         header.sectionResized.connect(self._position_checkbox_header_button)
         header.sectionMoved.connect(self._position_checkbox_header_button)
         header.geometriesChanged.connect(self._position_checkbox_header_button)
         self.tbl_string.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tbl_string.customContextMenuRequested.connect(self._show_table_context_menu)
-        self.tbl_string.horizontalScrollBar().valueChanged.connect(self._position_checkbox_header_button)
+        self.tbl_string.customContextMenuRequested.connect(
+            self._show_table_context_menu
+        )
+        self.tbl_string.horizontalScrollBar().valueChanged.connect(
+            self._position_checkbox_header_button
+        )
 
         layout.addWidget(self.tbl_string)
         self._initialize_string_table_placeholders()
@@ -546,11 +625,15 @@ class DisassembleTab(QWidget):
         self._last_checkbox_row = None
         for col in range(1, 6):
             align = Qt.AlignCenter if col in (1, 3) else None
-            tooltip = '0' if col == 2 else None
-            self.tbl_string.setItem(0, col, self._make_table_item('0', align=align, tooltip=tooltip))
+            tooltip = "0" if col == 2 else None
+            self.tbl_string.setItem(
+                0, col, self._make_table_item("0", align=align, tooltip=tooltip)
+            )
         self._add_checkbox_to_row(0, enabled=False, track=False)
 
-    def _make_table_item(self, text: str, align: Qt.Alignment | None = None, tooltip: str | None = None):
+    def _make_table_item(
+        self, text: str, align: Qt.Alignment | None = None, tooltip: str | None = None
+    ):
         item = QTableWidgetItem(text)
         flags = item.flags()
         item.setFlags(flags & ~Qt.ItemIsEditable)
@@ -565,7 +648,9 @@ class DisassembleTab(QWidget):
         checkbox.setEnabled(enabled)
         if enabled:
             checkbox.stateChanged.connect(self._on_row_checkbox_state_changed)
-            checkbox.clicked.connect(lambda checked, r=row: self._handle_row_checkbox_clicked(r, checked))
+            checkbox.clicked.connect(
+                lambda checked, r=row: self._handle_row_checkbox_clicked(r, checked)
+            )
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -612,25 +697,27 @@ class DisassembleTab(QWidget):
         menu = QMenu(self.tbl_string)
         if col == 2:
             action = QAction("Copy Raw", menu)
-            action.triggered.connect(lambda: self._copy_to_clipboard(row, 'value'))
+            action.triggered.connect(lambda: self._copy_to_clipboard(row, "value"))
             menu.addAction(action)
         if col == 3:
             action_copy = QAction("Copy Address", menu)
-            action_copy.triggered.connect(lambda: self._copy_to_clipboard(row, 'address'))
+            action_copy.triggered.connect(
+                lambda: self._copy_to_clipboard(row, "address")
+            )
             menu.addAction(action_copy)
             action_jump = QAction("Jump to Address", menu)
             action_jump.triggered.connect(lambda: self._jump_to_address(row))
             menu.addAction(action_jump)
         if col == 4:
             action = QAction("Copy Preview", menu)
-            action.triggered.connect(lambda: self._copy_to_clipboard(row, 'preview'))
+            action.triggered.connect(lambda: self._copy_to_clipboard(row, "preview"))
             menu.addAction(action)
         if col == 5:
             action_show = QAction("Show Xrefs", menu)
             action_show.triggered.connect(lambda: self._print_xrefs(row))
             menu.addAction(action_show)
             action_copy = QAction("Copy Xrefs", menu)
-            action_copy.triggered.connect(lambda: self._copy_to_clipboard(row, 'xrefs'))
+            action_copy.triggered.connect(lambda: self._copy_to_clipboard(row, "xrefs"))
             menu.addAction(action_copy)
 
         if menu.actions():
@@ -641,7 +728,7 @@ class DisassembleTab(QWidget):
             return
         entry = self.string_results[row]
         if isinstance(entry, dict):
-            raw = entry.get(field, '')
+            raw = entry.get(field, "")
         else:
             raw = entry
         QApplication.clipboard().setText(str(raw))
@@ -651,7 +738,7 @@ class DisassembleTab(QWidget):
             return
         entry = self.string_results[row]
         if isinstance(entry, dict):
-            address = entry.get('address')
+            address = entry.get("address")
         else:
             address = entry
         idaapi.jumpto(address)
@@ -664,7 +751,7 @@ class DisassembleTab(QWidget):
             return value
         if isinstance(value, str):
             try:
-                return int(value, 16) if value.lower().startswith('0x') else int(value)
+                return int(value, 16) if value.lower().startswith("0x") else int(value)
             except ValueError:
                 return None
         return None
@@ -678,22 +765,28 @@ class DisassembleTab(QWidget):
             idaapi.msg("[Sharingan] No xref data for this row.\n")
             return
 
-        raw_xrefs = entry.get('xrefs') or []
-        normalized = [ea for ea in (self._normalize_ea(x) for x in raw_xrefs) if ea is not None]
+        raw_xrefs = entry.get("xrefs") or []
+        normalized = [
+            ea for ea in (self._normalize_ea(x) for x in raw_xrefs) if ea is not None
+        ]
         if not normalized:
             idaapi.msg("[Sharingan] No xrefs recorded for the selected string.\n")
             return
 
-        formatted = ', '.join(f"0x{ea:08X}" for ea in normalized)
+        formatted = ", ".join(f"0x{ea:08X}" for ea in normalized)
         idaapi.msg(f"[Sharingan] Xrefs for row {row + 1}: {formatted}\n")
 
     def _update_checkbox_header_label(self):
-        if not hasattr(self, 'checkbox_header_button'):
+        if not hasattr(self, "checkbox_header_button"):
             return
-        self.checkbox_header_button.setText('\u2611' if self._are_all_rows_checked() else '\u2610')
+        self.checkbox_header_button.setText(
+            "\u2611" if self._are_all_rows_checked() else "\u2610"
+        )
 
     def _are_all_rows_checked(self) -> bool:
-        return bool(self.string_row_checkboxes) and all(cb.isChecked() for cb in self.string_row_checkboxes)
+        return bool(self.string_row_checkboxes) and all(
+            cb.isChecked() for cb in self.string_row_checkboxes
+        )
 
     def _set_all_row_checkboxes(self, state: bool):
         for cb in self.string_row_checkboxes:
@@ -708,7 +801,10 @@ class DisassembleTab(QWidget):
         self._set_all_row_checkboxes(select_all)
 
     def _position_checkbox_header_button(self, *args):
-        if not hasattr(self, 'checkbox_header_container') or not self.checkbox_header_container:
+        if (
+            not hasattr(self, "checkbox_header_container")
+            or not self.checkbox_header_container
+        ):
             return
         header = self.tbl_string.horizontalHeader()
         if self.checkbox_header_index >= header.count():
@@ -731,7 +827,7 @@ class DisassembleTab(QWidget):
         snapshot = []
         for item in self.string_results:
             if isinstance(item, dict):
-                snapshot.append((item.get('value', ''), item.get('address')))
+                snapshot.append((item.get("value", ""), item.get("address")))
             else:
                 snapshot.append((item, None))
         return snapshot
@@ -741,7 +837,7 @@ class DisassembleTab(QWidget):
             return False
         entry = self.string_results[row]
         if isinstance(entry, dict):
-            entry['preview'] = preview_value
+            entry["preview"] = preview_value
         text = str(preview_value)
         table_item = self.tbl_string.item(row, 4)
         if table_item:
@@ -762,7 +858,9 @@ class DisassembleTab(QWidget):
                 return value
             if isinstance(value, str):
                 try:
-                    return int(value, 16) if value.lower().startswith('0x') else int(value)
+                    return (
+                        int(value, 16) if value.lower().startswith("0x") else int(value)
+                    )
                 except ValueError:
                     return None
             return None
@@ -773,7 +871,9 @@ class DisassembleTab(QWidget):
 
         updated = False
         for row, entry in enumerate(self.string_results):
-            current = _normalize_address(entry.get('address') if isinstance(entry, dict) else None)
+            current = _normalize_address(
+                entry.get("address") if isinstance(entry, dict) else None
+            )
             if current != target:
                 continue
             if self._apply_preview_to_row(row, preview_value):
@@ -785,10 +885,10 @@ class DisassembleTab(QWidget):
 
     def scan_code_strings(self):
         if self.string_finder is None:
-            idaapi.msg('[Sharingan] String Finder modules unavailable.\n')
+            idaapi.msg("[Sharingan] String Finder modules unavailable.\n")
             return
         self.btn_scan_code.setEnabled(False)
-        self.btn_scan_code.setText('Scanning...')
+        self.btn_scan_code.setText("Scanning...")
         ida_kernwin.execute_sync(self._run_scan_code_strings, ida_kernwin.MFF_WRITE)
 
     def _run_scan_code_strings(self):
@@ -798,7 +898,7 @@ class DisassembleTab(QWidget):
         except Exception as exc:
             idaapi.msg(f"[Sharingan] String scan failed: {exc}\n")
         self.btn_scan_code.setEnabled(True)
-        self.btn_scan_code.setText('Scan code')
+        self.btn_scan_code.setText("Scan code")
         self.populate_string_table(results)
 
     def populate_string_table(self, strings: list):
@@ -818,17 +918,27 @@ class DisassembleTab(QWidget):
         self._last_checkbox_row = None
         for row, item in enumerate(self.string_results):
             idx_item = self._make_table_item(str(row + 1), align=Qt.AlignCenter)
-            raw_value = item.get('value', '')
-            address = item.get('address', 0)
-            preview_value = item.get('preview') or raw_value
-            xref_list = item.get('xrefs') or []
-            xref_text = '\n'.join(f"0x{ea:08X}" for ea in xref_list) if xref_list else '0'
+            raw_value = item.get("value", "")
+            address = item.get("address", 0)
+            preview_value = item.get("preview") or raw_value
+            xref_list = item.get("xrefs") or []
+            xref_text = (
+                "\n".join(f"0x{ea:08X}" for ea in xref_list) if xref_list else "0"
+            )
 
             self.tbl_string.setItem(row, 1, idx_item)
-            self.tbl_string.setItem(row, 2, self._make_table_item(raw_value, tooltip=raw_value))
-            self.tbl_string.setItem(row, 3, self._make_table_item(f"0x{address:08X}", align=Qt.AlignCenter))
-            self.tbl_string.setItem(row, 4, self._make_table_item(preview_value, tooltip=preview_value))
-            self.tbl_string.setItem(row, 5, self._make_table_item(xref_text, tooltip=xref_text))
+            self.tbl_string.setItem(
+                row, 2, self._make_table_item(raw_value, tooltip=raw_value)
+            )
+            self.tbl_string.setItem(
+                row, 3, self._make_table_item(f"0x{address:08X}", align=Qt.AlignCenter)
+            )
+            self.tbl_string.setItem(
+                row, 4, self._make_table_item(preview_value, tooltip=preview_value)
+            )
+            self.tbl_string.setItem(
+                row, 5, self._make_table_item(xref_text, tooltip=xref_text)
+            )
             self._add_checkbox_to_row(row)
 
         self.tbl_string.setUpdatesEnabled(True)
@@ -837,11 +947,11 @@ class DisassembleTab(QWidget):
 
     def ignore_selected_strings(self):
         if not self.string_results:
-            idaapi.msg('[Sharingan] No strings available to ignore.\n')
+            idaapi.msg("[Sharingan] No strings available to ignore.\n")
             return
         selected_rows = self.get_selected_string_rows()
         if not selected_rows:
-            idaapi.msg('[Sharingan] Please select at least one string to ignore.\n')
+            idaapi.msg("[Sharingan] Please select at least one string to ignore.\n")
             return
         values_to_ignore = []
         for row in selected_rows:
@@ -849,48 +959,73 @@ class DisassembleTab(QWidget):
             if item and item.text():
                 values_to_ignore.append(item.text())
         if not values_to_ignore:
-            idaapi.msg('[Sharingan] Unable to determine selected string values.\n')
+            idaapi.msg("[Sharingan] Unable to determine selected string values.\n")
             return
         if not self._append_ignore_strings(values_to_ignore):
             return
         selected_set = set(selected_rows)
-        remaining_results = [entry for idx, entry in enumerate(self.string_results) if idx not in selected_set]
+        remaining_results = [
+            entry
+            for idx, entry in enumerate(self.string_results)
+            if idx not in selected_set
+        ]
         self.populate_string_table(remaining_results)
         idaapi.msg(f"[Sharingan] Ignored {len(values_to_ignore)} string(s).\n")
 
     def _append_ignore_strings(self, strings):
-        store = getattr(self.string_finder, 'ignore_store', None)
+        store = getattr(self.string_finder, "ignore_store", None)
         if not store or not store.user_path:
-            idaapi.msg('[Sharingan] Ignore store is unavailable.\n')
+            idaapi.msg("[Sharingan] Ignore store is unavailable.\n")
             return False
         new_literals = store.append_literals(strings)
         if not new_literals:
-            idaapi.msg('[Sharingan] Selected strings already ignored.\n')
+            idaapi.msg("[Sharingan] Selected strings already ignored.\n")
             return False
         self.string_finder.result_filter.ignore_literals.update(new_literals)
         return True
 
     def change_mode_code_string(self, index):
         mode = self.cmb_mode.itemText(index)
-        self.layout_stack.setCurrentIndex(1 if mode.lower() == 'string' else 0)
+
+        if mode.lower() == "string":
+            self.layout_stack.setCurrentIndex(1)
+            self.ldt_start_ea.setEnabled(False)
+            self.ldt_end_ea.setEnabled(False)
+        else:
+            self.layout_stack.setCurrentIndex(0)
+            self.ldt_start_ea.setEnabled(True)
+            self.ldt_end_ea.setEnabled(True)
+            self.asm_view.idx_bookmark = 0
+            self.asm_view.count_manual_bookmark = 0
+            start_region = self.asm_view.start_ea
+            end_region = self.asm_view.end_ea
+            if mode.lower() == "disassembler":
+                self.asm_view.disassemble(start_region, end_region)
+            elif mode.lower() == "decompiler":
+                self.asm_view.decompile(start_region, end_region)
+
         self.mode = mode.lower()
         self.asm_view.mode = self.mode
 
     def get_line_edit_texts(self):
         return self.ldt_start_ea.text(), self.ldt_end_ea.text()
 
-    def set_line_edit_texts(self, start_ea, end_ea, is_all_binary=False):
+    def set_line_edit_texts(self, start_ea, end_ea, idx_bookmark, count_manual_bookmark, is_all_binary=False):
         if start_ea == end_ea:
             end_ea = start_ea
             for _ in range(256):
                 end_ea = idaapi.next_head(end_ea, idaapi.BADADDR)
         self.ldt_start_ea.setText(hex(start_ea))
         self.ldt_end_ea.setText(hex(end_ea))
+        self.asm_view.idx_bookmark = idx_bookmark
+        self.asm_view.count_manual_bookmark = count_manual_bookmark
         if not is_all_binary:
             self.switch_mode_display()
 
     def choose_function(self):
-        func = idaapi.choose_func("Choose function to deobfuscate", idaapi.get_screen_ea())
+        func = idaapi.choose_func(
+            "Choose function to deobfuscate", idaapi.get_screen_ea()
+        )
         if func is None:
             return
 
@@ -912,11 +1047,15 @@ class DisassembleTab(QWidget):
                 e_txt = self.ldt_end_ea.text().strip()
 
                 if not s_txt or not e_txt:
-                    print('Empty address')
+                    print("Empty address")
                     return
 
-                start_ea = int(s_txt, 16) if s_txt.lower().startswith("0x") else int(s_txt)
-                end_ea = int(e_txt, 16) if e_txt.lower().startswith("0x") else int(e_txt)
+                start_ea = (
+                    int(s_txt, 16) if s_txt.lower().startswith("0x") else int(s_txt)
+                )
+                end_ea = (
+                    int(e_txt, 16) if e_txt.lower().startswith("0x") else int(e_txt)
+                )
 
                 if end_ea <= start_ea:
                     # Logic cũ dùng assert nhưng trong GUI không nên crash app, chỉ return
@@ -924,7 +1063,7 @@ class DisassembleTab(QWidget):
                     return
 
                 if self.cached_start_ea == start_ea and self.cached_end_ea == end_ea:
-                    print('Same previous range')
+                    print("Same previous range")
                     return
 
                 self.cached_start_ea = start_ea
@@ -934,9 +1073,9 @@ class DisassembleTab(QWidget):
                 print("Error parsing address")
                 return
 
-        if self.mode == 'disassembler':
+        if self.mode == "disassembler":
             self.asm_view.disassemble(start_ea, end_ea)
-        elif self.mode == 'decompiler':
+        elif self.mode == "decompiler":
             self.asm_view.decompile(start_ea, end_ea)
 
     def wrapper_diff_code(self, obfuscated_regions=None):
@@ -951,26 +1090,32 @@ class DisassembleTab(QWidget):
     def clear_asmview(self):
         self.asm_view.ClearLines()
 
+    def clear_input_address(self):
+        self.ldt_start_ea.clear()
+        self.ldt_end_ea.clear()
+
     def refresh_asmview(self):
         start_ea = self.asm_view.start_ea
         end_ea = self.asm_view.end_ea
-        if self.mode == 'disassembler':
+        if self.mode == "disassembler":
             self.asm_view.disassemble(start_ea, end_ea)
-        elif self.mode == 'decompiler':
+        elif self.mode == "decompiler":
             self.asm_view.decompile(start_ea, end_ea)
 
 
 # class handle list tab disassembler
 class Disassembler(QTabWidget):
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         super().__init__()
         self.setTabsClosable(True)
         self.setMovable(True)
-        self.setObjectName('disassembler')
+        self.setObjectName("disassembler")
         self.tabCloseRequested.connect(self.close_tab)
         self.setup_ui()
-        if platform.system().lower() == 'windows':
-            self.setProperty('applyWindows', 'true')
+        if platform.system().lower() == "windows":
+            self.setProperty("applyWindows", "true")
         self.setStyleSheet(ManageStyleSheet.get_stylesheet())
         self.tab_contents = []
         self.signal_filter = None
@@ -978,8 +1123,8 @@ class Disassembler(QTabWidget):
         self.add_new_tab()
 
     def setup_ui(self):
-        self.btn_add_tab = QPushButton(' + ')
-        self.btn_add_tab.setObjectName('new_tab')
+        self.btn_add_tab = QPushButton(" + ")
+        self.btn_add_tab.setObjectName("new_tab")
         self.btn_add_tab.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
         self.btn_add_tab.clicked.connect(self.add_new_tab)
         self.setCornerWidget(self.btn_add_tab, Qt.TopRightCorner)
@@ -1032,13 +1177,18 @@ class Disassembler(QTabWidget):
         return tab.update_preview_at_location(ea, preview_value)
 
     def get_tab_line_edit_texts(self, index):
-        return self.tab_contents[index].get_line_edit_texts() if self.tab_contents[index] else []
+        return (
+            self.tab_contents[index].get_line_edit_texts()
+            if self.tab_contents[index]
+            else []
+        )
 
     def clear_tab_asmview(self, index):
         self.tab_contents[index].clear_asmview()
+        self.tab_contents[index].clear_input_address()
 
-    def set_tab_line_edit_texts(self, index, start_ea, end_ea, is_all_binary=False):
-        self.tab_contents[index].set_line_edit_texts(start_ea, end_ea, is_all_binary)
+    def set_tab_line_edit_texts(self, index, start_ea, end_ea, idx_bookmark, count_manual_bookmark, is_all_binary=False):
+        self.tab_contents[index].set_line_edit_texts(start_ea, end_ea, idx_bookmark, count_manual_bookmark, is_all_binary)
 
     # display diff
     def compare_tab_code(self, index, obfuscated_regions=None):
