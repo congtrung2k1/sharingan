@@ -1,0 +1,197 @@
+from sharingan.base.ingredient import Deobfuscator
+from sharingan.core.utils import DeobfuscateUtils
+import idaapi, ida_bytes, idc, ida_hexrays
+from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
+from PySide6.QtWidgets import QLineEdit, QComboBox, QHBoxLayout, QLabel, QSizePolicy
+
+
+class FinderCondition(ida_hexrays.ctree_visitor_t):
+    def __init__(self, func, obfus_region, equation, condition):
+        ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
+        self.flowchart = idaapi.FlowChart(func)
+        self.obfus_region = obfus_region
+        self.equation = equation
+        self.condition = condition
+
+    def get_boundary_block(self, ea):
+        for block in self.flowchart:
+            if block.start_ea <= ea < block.end_ea:
+                return block.start_ea, block.end_ea
+        return None, None
+
+    def get_expr_string(self, expr):
+        if not expr:
+            return False
+        return idaapi.tag_remove(expr.print1(None))
+
+    def is_break_statement(self, insn):
+        if not insn:
+            return False
+
+        if insn.op == ida_hexrays.cit_break:
+            return True
+
+        if insn.op == ida_hexrays.cit_block:
+            if insn.cblock.size() == 1:
+                first_insn = insn.cblock.front()
+                if first_insn.op == ida_hexrays.cit_break:
+                    return True
+        return False
+
+    def is_cmp_test(self, addr):
+        instr = idaapi.insn_t()
+        idaapi.decode_insn(instr, addr)
+        return instr.itype == idaapi.NN_cmp or instr.itype == idaapi.NN_test
+
+    def is_jmp(self, addr):
+        return idc.print_insn_mnem(addr).startswith("j")
+
+    def find_cmp_test(self, ea):
+        start_blk, end_blk = self.get_boundary_block(ea)
+        if start_blk and end_blk:
+            while ea != idaapi.BADADDR:
+                if self.is_cmp_test(ea):
+                    return ea
+                ea = idaapi.prev_head(ea, start_blk)
+        return idaapi.BADADDR
+
+    def get_start_block(self, insn):
+        if not insn:
+            return idaapi.BADADDR
+
+        if insn.ea != idaapi.BADADDR:
+            start_blk, _ = self.get_boundary_block(insn.ea)
+            return start_blk
+
+        if insn.op is ida_hexrays.cit_block and not insn.cblock.empty():
+            return self.get_start_block(insn.cblock.front())
+
+        return idaapi.BADADDR
+
+    def get_end_block(self, insn):
+        if not insn:
+            return idaapi.BADADDR
+
+        if insn.op is idaapi.cit_block:
+            if insn.cblock.empty():
+                return self.get_start_block(insn)
+            return self.get_end_block(insn.cblock.back())
+
+        if insn.ea != idaapi.BADADDR:
+            _, end_blk = self.get_boundary_block(insn.ea)
+            return end_blk
+        return idaapi.BADADDR
+
+    def find_and_or_condition(self, expr, result):
+        if not expr:
+            return
+
+        if expr.op in [ida_hexrays.cot_land, ida_hexrays.cot_lor]:
+            self.find_and_or_condition(expr.x, result)
+            self.find_and_or_condition(expr.y, result)
+        else:
+            op_ea = expr.ea
+            if op_ea != idaapi.BADADDR:
+                # maybe insn.ea not equal jmp => create region here
+                jmp_ea = self.find_jmp(op_ea)
+                cmp_ea = self.find_cmp_test(jmp_ea)
+                result.append({
+                    'cond': self.get_expr_string(expr),
+                    'cmp': cmp_ea,
+                    'jmp': jmp_ea
+                })
+
+    def find_jmp(self, jmp_ea):
+        while not self.is_jmp(jmp_ea):
+            jmp_ea = idaapi.next_head(jmp_ea, idaapi.BADADDR)
+        return jmp_ea
+
+    def visit_insn(self, insn):
+        if insn.op == ida_hexrays.cit_if:
+            cond = self.get_expr_string(insn.cif.expr)
+            if self.condition in cond and self.equation in cond:
+                print(f'--- [IF] at {hex(insn.ea)} ---')
+                print(f'   Condition: {cond}')
+
+                jmp_ea = insn.ea
+                jmp_ea = self.find_jmp(jmp_ea)
+                start_then = end_then = start_else = end_else = idaapi.BADADDR
+                if not insn.cif.ielse and not self.is_break_statement(insn.cif.ithen):
+                    start_then = idaapi.next_head(jmp_ea, idaapi.BADADDR)
+                    end_then = self.get_end_block(insn.cif.ithen)
+                else:
+                    if not self.is_break_statement(insn.cif.ithen):
+                        start_then = self.get_start_block(insn.cif.ithen)
+                        end_then = self.get_end_block(insn.cif.ithen)
+                    if not self.is_break_statement(insn.cif.ielse):
+                        start_else = self.get_start_block(insn.cif.ielse)
+                        end_else = self.get_end_block(insn.cif.ielse)
+                print(f"Then: start_blk {hex(start_then)} end_blk {hex(end_then)}")
+                if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
+                    print(f"Else start_else {hex(start_else)} end_else {hex(end_else)}")
+
+                if start_then != idaapi.BADADDR and end_then != idaapi.BADADDR:
+                    size_obfus = end_then - start_then
+                    possible_region = ObfuscatedRegion(start_ea = start_then, end_ea = end_then, obfus_size = size_obfus, comment = 'DeadIf Then', patch_bytes = size_obfus * b'\x90', name = 'DeadIf', action = Action.PATCH)
+                    if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
+                        size_obfus = end_else - start_else
+                        possible_region.append_obfu(start_ea = start_else, end_ea = end_else, obfus_size = size_obfus, comment = 'DeadIf Else', patch_bytes = size_obfus * b'\x90', action = Action.PATCH)
+
+                    sub_conditions = []
+                    self.find_and_or_condition(insn.cif.expr, sub_conditions)
+                    for idx, item in enumerate(sub_conditions):
+                        # print(f'   Sub-Cond {idx+1}: {item["cond"]}')
+                        print(f'      CMP: {hex(item["cmp"])} | JMP: {hex(item["jmp"])}')
+                        if not(start_then <= item["cmp"] < end_then) or not (start_else <= item["cmp"] < end_else):
+                            size_cmp = idaapi.get_item_size(item["cmp"])
+                            possible_region.append_obfu(start_ea = item["cmp"], end_ea = idaapi.next_head(item["cmp"], idaapi.BADADDR), obfus_size = size_cmp, comment = 'DeadIf CMP', patch_bytes = size_cmp * b'\x90', action = Action.PATCH)
+                        if not (start_then <= item["jmp"] < end_then) or not (start_else <= item["jmp"] < end_else):
+                            size_jmp = idaapi.get_item_size(item["jmp"])
+                            possible_region.append_obfu(start_ea = item["jmp"], end_ea = idaapi.next_head(item["jmp"], idaapi.BADADDR), obfus_size = size_jmp, comment = 'DeadIf JMP', patch_bytes = size_jmp * b'\x90', action = Action.PATCH)
+
+                    self.obfus_region.append(possible_region)
+
+        return 0
+
+class DeadIf(Deobfuscator):
+    def __init__(self):
+        super().__init__('DeadIf')
+        self.description = 'Deadcode Condition'
+        self.version = '1.0'
+
+    def setup_ui(self):
+        super().setup_ui()
+
+        self.lbl_label = QLabel('Condition')
+        self.lbl_label.setObjectName('header_ingredient_recipe')
+        self.cmb_equation = QComboBox()
+        self.cmb_equation.addItems(['>=', '>', '<', '<=', '=='])
+        self.cmb_equation.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.ldt_condition = QLineEdit()
+        self.layout_input = QHBoxLayout()
+        self.layout_input.addWidget(self.lbl_label)
+        self.layout_input.addWidget(self.cmb_equation)
+        self.layout_input.addWidget(self.ldt_condition)
+        self.layout_body.addLayout(self.layout_input)
+
+    def scan(self, start_addr, end_addr):
+        self.possible_obfuscation_regions.clear()
+
+        equation = self.cmb_equation.currentText()
+        condition = self.ldt_condition.text()
+
+        if not ida_hexrays.init_hexrays_plugin():
+            print("Hex-Rays decompiler not available.")
+            exit()
+        f = idaapi.get_func(start_addr)
+        if not f:
+            print("Please select a function.")
+            exit()
+        cfunc = ida_hexrays.decompile(f)
+        if cfunc:
+            print(f"\n[v] ANALYSIS LOG FOR: {idaapi.get_func_name(f.start_ea)}")
+            visitor = FinderCondition(f, self.possible_obfuscation_regions, equation, condition)
+            visitor.apply_to(cfunc.body, None)
+            print("[v] Analysis Finished.")
+
+        return self.possible_obfuscation_regions

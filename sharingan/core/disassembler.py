@@ -63,7 +63,6 @@ class DBHook(idaapi.IDB_Hooks):
             self.asm_view.addr_pseudo_highlight ^= idx_line
         elif color != Color.BG_BOOKMARK and color != Color.DEFCOLOR:
             self.asm_view.addr_asm_highlight.add(ea)
-            print(self.asm_view.addr_asm_highlight)
             self.asm_view.addr_pseudo_highlight |= idx_line
 
 

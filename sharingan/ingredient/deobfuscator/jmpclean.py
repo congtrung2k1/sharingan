@@ -52,7 +52,7 @@ class JmpClean(Deobfuscator):
                             print(f"Invalid jmp {current_addr}")
                             is_valid_jmp = False
                             continue
-                        comment += "{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n"
+                        comment += f"{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n"
                         current_addr += len_obfu_jump // 2
 
                     if is_valid_jmp:
