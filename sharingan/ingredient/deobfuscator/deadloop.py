@@ -42,11 +42,11 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
         if expr.y.op == self.COT_NUM:
             code_val = expr.y.n._value
             if self.equation in ['>', '>=']:
-                return code_val >= self.user_val
+                return self.user_val >= code_val
             elif self.equation in ['<', '<=']:
-                return code_val <= self.user_val
+                return self.user_val <= code_val
             elif self.equation == '==':
-                return code_val == self.user_val
+                return self.user_val == code_val
         return False
 
     def get_boundary_block(self, ea):

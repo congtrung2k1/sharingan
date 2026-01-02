@@ -94,9 +94,14 @@ class DeobfuscateUtils:
     def reset(start_addr, end_addr):
         next_addr = start_addr
         while next_addr < end_addr:
-            idaapi.del_hidden_range(next_addr)
-            # if patching before, run previewing in second time will be delete color patching
             idc.set_color(next_addr, idc.CIC_ITEM, 0xFFFFFFFF)
+            hr = idaapi.get_hidden_range(next_addr)
+            if hr:
+                ba = ida_bytes.get_bytes(hr.start_ea, hr.end_ea - hr.start_ea)
+                if not DeobfuscateUtils.is_all_nop(ba):
+                    idaapi.del_hidden_range(next_addr)
+                next_addr = hr.end_ea
+                continue
             flags = idaapi.get_flags(next_addr)
             if idaapi.is_code(flags):
                 size_item = idaapi.get_item_size(next_addr)
