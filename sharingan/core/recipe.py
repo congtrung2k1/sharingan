@@ -480,41 +480,6 @@ class Recipe(QWidget):
         active_index = self.disassembler.currentIndex()
         self.disassembler.set_tab_line_edit_texts(active_index, start_region, end_region, index, self.count_manual_bookmark)
 
-    # Flatten all sub-regions with their locations
-    # def check_overlapping_regions(self):
-    #     intervals = []
-    #     for i, list_regions in enumerate(self.obfuscated_regions):
-    #         for j, r in enumerate(list_regions):
-    #             for k, region_part in enumerate(r.regions):
-    #                 intervals.append((region_part.start_ea, region_part.end_ea, i, j, k, r.name))
-
-    #     if not intervals:
-    #         return False
-
-    #     # Sort by start, then by end
-    #     intervals.sort(key=lambda x: (x[0], x[1]))
-
-    #     # Collect regions to alert
-    #     self.overlapping_regions.clear()
-    #     curr_end = intervals[0][1]
-    #     for index in range(1, len(intervals)):
-    #         start, end, i, j, k, current_name = intervals[index]
-    #         # after sort, if end_region larger than previous start region => overlap
-    #         if start < curr_end:
-    #             previous_name = intervals[index - 1][5]
-    #             self.overlapping_regions.add((i, j, k, current_name, previous_name))
-    #         else:
-    #             curr_end = end
-
-    #     if self.overlapping_regions:
-    #         for region in self.overlapping_regions:
-    #             i, j, k, current_name, previous_name = region
-    #             start_overlapping = self.obfuscated_regions[i][j].regions[k].start_ea
-    #             end_overlapping = self.obfuscated_regions[i][j].regions[k].end_ea
-    #             print(f"Overlap: {hex(start_overlapping)} - {hex(end_overlapping)} - {current_name} - {previous_name}")
-    #         return True
-    #     return False
-
     def check_overlapping_regions(self):
         intervals = []
         for i, list_regions in enumerate(self.obfuscated_regions):
@@ -530,20 +495,16 @@ class Recipe(QWidget):
         if not intervals:
             return False
 
-        # Sắp xếp theo địa chỉ bắt đầu
         intervals.sort(key=lambda x: (x['start'], x['end']))
 
-        self.overlapping_regions.clear() # Lưu trữ các tuple (start, end) của vùng giao nhau thực sự
+        self.overlapping_regions.clear()
         has_overlap = False
 
         for i in range(len(intervals)):
             for j in range(i + 1, len(intervals)):
-                # Vì đã sort, nếu region j bắt đầu sau khi region i kết thúc thì không thể overlap nữa
                 if intervals[j]['start'] >= intervals[i]['end']:
                     break
 
-                # Tính toán vùng giao nhau thực sự (Intersection)
-                # Do đã sort nên start_j luôn >= start_i
                 inter_start = intervals[j]['start']
                 inter_end = min(intervals[i]['end'], intervals[j]['end'])
 
@@ -558,13 +519,6 @@ class Recipe(QWidget):
     def highlight_overlapping(self):
         for start_ea, end_ea in self.overlapping_regions:
             DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_OVERLAPPING)
-
-    # highlight background overlapping region by red
-    # def highlight_overlapping(self):
-    #     for region in self.overlapping_regions:
-    #         i, j, k, _, _ = region
-    #         item = self.obfuscated_regions[i][j].regions[k]
-    #         DeobfuscateUtils.color_range(item.start_ea, item.end_ea, Color.BG_OVERLAPPING)
 
     #highlight background obfuscated region by green
     def highlight_hint(self):
@@ -612,17 +566,28 @@ class Recipe(QWidget):
                             idaapi.add_hidden_range(start_ea, end_ea, reg.comment, '', '', Color.BG_PATCH_HIDDEN)
                         # greater than 1 insn
                         else:
-                            nop_ea = start_ea
-                            while nop_ea < end_ea:
-                                print(hex(nop_ea))
-                                if DeobfuscateUtils.is_nop(nop_ea):
-                                    break
-                                idc.set_color(nop_ea, idc.CIC_ITEM, Color.BG_PATCH_HIDDEN)
-                                nop_ea = idaapi.get_item_end(nop_ea)
+                            curr_ea = start_ea
+                            while curr_ea < end_ea:
+                                if DeobfuscateUtils.is_nop(curr_ea):
+                                    nop_block_start = curr_ea
 
-                            DeobfuscateUtils.mark_as_code(start_ea, end_ea)
-                            idaapi.del_item_color(nop_ea)
-                            idaapi.add_hidden_range(nop_ea, end_ea, 'NOP', '', '', Color.BG_PATCH_HIDDEN)
+                                    while curr_ea < end_ea and DeobfuscateUtils.is_nop(curr_ea):
+                                        idaapi.del_item_color(curr_ea)
+                                        next_ea = idaapi.next_head(curr_ea, end_ea)
+                                        if next_ea == idaapi.BADADDR or next_ea >= end_ea:
+                                            curr_ea = end_ea
+                                            break
+                                        curr_ea = next_ea
+
+                                    idaapi.add_hidden_range(nop_block_start, curr_ea, 'NOP', '', '', Color.BG_PATCH_HIDDEN)
+                                else:
+                                    idc.set_color(curr_ea, idc.CIC_ITEM, Color.BG_PATCH_HIDDEN)
+                                    next_ea = idaapi.next_head(curr_ea, end_ea)
+                                    if next_ea == idaapi.BADADDR or next_ea >= end_ea:
+                                        curr_ea = end_ea
+                                    else:
+                                        curr_ea = next_ea
+
                             self.hint_hook.insert_hint(start_ea, reg.comment)
 
         DeobfuscateUtils.refresh_view()

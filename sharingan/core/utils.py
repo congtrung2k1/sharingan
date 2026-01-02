@@ -89,13 +89,13 @@ class DeobfuscateUtils:
                 return True
 
         return False
-        # return instr.itype == idaapi.NN_nop
 
     @staticmethod
     def reset(start_addr, end_addr):
         next_addr = start_addr
         while next_addr < end_addr:
             idaapi.del_hidden_range(next_addr)
+            # if patching before, run previewing in second time will be delete color patching
             idc.set_color(next_addr, idc.CIC_ITEM, 0xFFFFFFFF)
             flags = idaapi.get_flags(next_addr)
             if idaapi.is_code(flags):
