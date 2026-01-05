@@ -135,60 +135,13 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
             jmp_ea = idaapi.next_head(jmp_ea, idaapi.BADADDR)
         return jmp_ea
 
-    # def visit_insn(self, insn):
-    #     if insn.op == ida_hexrays.cit_if:
-    #         if self.check_numeric_logic(insn.cif.expr):
-    #         # if self.condition in cond and self.equation in cond:
-    #             print(f'--- [IF] at {hex(insn.ea)} ---')
-    #             cond = self.get_expr_string(insn.cif.expr)
-    #             print(f'   Condition: {cond}')
-
-    #             jmp_ea = insn.ea
-    #             jmp_ea = self.find_jmp(jmp_ea)
-    #             start_then = end_then = start_else = end_else = idaapi.BADADDR
-    #             if not insn.cif.ielse and not self.is_break_statement(insn.cif.ithen):
-    #                 start_then = idaapi.next_head(jmp_ea, idaapi.BADADDR)
-    #                 end_then = self.get_end_block(insn.cif.ithen)
-    #             else:
-    #                 if not self.is_break_statement(insn.cif.ithen):
-    #                     start_then = self.get_start_block(insn.cif.ithen)
-    #                     end_then = self.get_end_block(insn.cif.ithen)
-    #                 if not self.is_break_statement(insn.cif.ielse):
-    #                     start_else = self.get_start_block(insn.cif.ielse)
-    #                     end_else = self.get_end_block(insn.cif.ielse)
-    #             print(f"Then: start_blk {hex(start_then)} end_blk {hex(end_then)}")
-    #             if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
-    #                 print(f"Else start_else {hex(start_else)} end_else {hex(end_else)}")
-
-    #             if start_then != idaapi.BADADDR and end_then != idaapi.BADADDR:
-    #                 size_obfus = end_then - start_then
-    #                 possible_region = ObfuscatedRegion(start_ea = start_then, end_ea = end_then, obfus_size = size_obfus, comment = 'DeadIf Then', patch_bytes = size_obfus * b'\x90', name = 'DeadIf', action = Action.PATCH)
-    #                 if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
-    #                     size_obfus = end_else - start_else
-    #                     possible_region.append_obfu(start_ea = start_else, end_ea = end_else, obfus_size = size_obfus, comment = 'DeadIf Else', patch_bytes = size_obfus * b'\x90', action = Action.PATCH)
-
-    #                 sub_conditions = []
-    #                 self.find_and_or_condition(insn.cif.expr, sub_conditions)
-    #                 for idx, item in enumerate(sub_conditions):
-    #                     print(f'      CMP: {hex(item["cmp"])} | JMP: {hex(item["jmp"])}')
-    #                     if not(start_then <= item["cmp"] < end_then) or not (start_else <= item["cmp"] < end_else):
-    #                         size_cmp = idaapi.get_item_size(item["cmp"])
-    #                         possible_region.append_obfu(start_ea = item["cmp"], end_ea = idaapi.next_head(item["cmp"], idaapi.BADADDR), obfus_size = size_cmp, comment = 'DeadIf CMP', patch_bytes = size_cmp * b'\x90', action = Action.PATCH)
-    #                     if not (start_then <= item["jmp"] < end_then) or not (start_else <= item["jmp"] < end_else):
-    #                         size_jmp = idaapi.get_item_size(item["jmp"])
-    #                         possible_region.append_obfu(start_ea = item["jmp"], end_ea = idaapi.next_head(item["jmp"], idaapi.BADADDR), obfus_size = size_jmp, comment = 'DeadIf JMP', patch_bytes = size_jmp * b'\x90', action = Action.PATCH)
-
-    #                 self.obfus_region.append(possible_region)
-
-    #     return 0
-    #
     def visit_insn(self, insn):
         if insn.op == ida_hexrays.cit_if:
             # check condition expression if is junk code or not base on input of user
             if self.check_numeric_logic(insn.cif.expr):
-                print(f'--- [IF] at {hex(insn.ea)} ---')
+                print(f"[Sharingan] --- [IF] at {hex(insn.ea)} ---")
                 cond = self.get_expr_string(insn.cif.expr)
-                print(f'   Condition: {cond}')
+                print(f"[Sharingan]    Condition: {cond}")
 
                 # 1. find pair cmp/jmp instruction and/or
                 sub_conditions = []
@@ -283,17 +236,17 @@ class DeadIf(Deobfuscator):
         condition = self.ldt_condition.text()
 
         if not ida_hexrays.init_hexrays_plugin():
-            print("Hex-Rays decompiler not available.")
+            print("[Sharingan] Hex-Rays decompiler not available.")
             exit()
         f = idaapi.get_func(start_addr)
         if not f:
-            print("Please select a function.")
+            print("[Sharingan] Please select a function.")
             exit()
         cfunc = ida_hexrays.decompile(f)
         if cfunc:
-            print(f"\n[v] ANALYSIS LOG FOR: {idaapi.get_func_name(f.start_ea)}")
+            print(f"\n[Sharingan] [v] ANALYSIS LOG FOR: {idaapi.get_func_name(f.start_ea)}")
             visitor = FinderCondition(f, self.possible_obfuscation_regions, equation, condition)
             visitor.apply_to(cfunc.body, None)
-            print("[v] Analysis Finished.")
+            print("[Sharingan] [v] Analysis Finished.")
 
         return self.possible_obfuscation_regions

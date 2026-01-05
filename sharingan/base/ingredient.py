@@ -2,11 +2,11 @@ from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QCheckBox, QHBoxLayo
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
 from abc import abstractmethod
-from sharingan.core.stylesmanager import ManageStyleSheet
-from sharingan.core.utils import DecryptionUtils
+from sharingan.core.utils import DecryptionUtils, ManageStyleSheet
 from sharingan.base.obfuscatedregion import ListObfuscatedRegion
 
 
+# parent class for deobfuscation and decryption
 class Ingredient(QWidget):
     def __init__(self, label: str = "UnnamedModule"):
         super().__init__()
@@ -19,7 +19,7 @@ class Ingredient(QWidget):
     # define all things relative ui in setup_ui
     def setup_ui(self):
         self.lbl_name = QLabel(self.name)
-        self.lbl_name.setObjectName('header_ingredient_recipe')
+        self.lbl_name.setObjectName("header_ingredient_recipe")
         self.chk_active = QCheckBox()
         self.chk_active.toggled.connect(self.active_ingredient)
         self.layout_header = QHBoxLayout()
@@ -52,6 +52,7 @@ class Ingredient(QWidget):
         self.chk_active.setEnabled(True)
 
 
+# base class for deobfuscation, new class must be inherit from it
 class Deobfuscator(Ingredient):
     def __init__(self, label):
         super().__init__(label)
@@ -62,6 +63,7 @@ class Deobfuscator(Ingredient):
         raise NotImplementedError('Must be implement method scan')
 
 
+# base class for decrypotion, new class must be inherit from it
 class Decryption(Ingredient):
     def __init__(self, label):
         super().__init__(label)

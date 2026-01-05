@@ -23,12 +23,13 @@ from PySide6.QtWidgets import (
 
 from sharingan.core.StrFinder.string_finder import StringFinder
 from sharingan.core.stringfindertable import StringFinderTable
-from sharingan.core.stylesmanager import ManageStyleSheet
-from sharingan.core.utils import Color, DeobfuscateUtils
+from sharingan.core.utils import Color, DeobfuscateUtils, ManageStyleSheet
+
 
 FILTER_ACTION_NAME = "sharingan:filter"
 
 
+# hook colored instruction of disassembler IDA to color in asm_view
 class DBHook(idaapi.IDB_Hooks):
     def __init__(self, asm_view):
         super().__init__()
@@ -40,6 +41,7 @@ class DBHook(idaapi.IDB_Hooks):
     # highlight hint in asm_view
     def item_color_changed(self, ea, color):
         idx_line = set()
+        # get index line of mode decompiler asm_view via address disassembler IDA
         if self.asm_view.mode == "decompiler":
             if ea in self.asm_view.eamap:
                 items = self.asm_view.eamap[ea]
@@ -50,6 +52,7 @@ class DBHook(idaapi.IDB_Hooks):
                             _, y = coords
                             idx_line.add(y)
 
+        # add address to list to highlight
         if ea in self.asm_view.addr_asm_highlight:
             self.asm_view.addr_asm_highlight.discard(ea)
             self.asm_view.addr_pseudo_highlight ^= idx_line
@@ -62,17 +65,16 @@ class DBHook(idaapi.IDB_Hooks):
                 self.asm_view.addr_asm_overlap.add(ea)
 
 
-# color asm line
+# color line in asm_view
 class ASMLine:
     def __init__(self, ea):
         self.label = idaapi.get_short_name(ea)
         self.address = ea
         self.padding = " " * 2
 
-        # flags = idaapi.get_flags(ea)
         flags = ida_bytes.get_full_flags(ea)
 
-        # if idaapi.is_head(flags):
+        # get all type in range include data/code
         if ida_bytes.is_code(flags):
             self.colored_instruction = idaapi.generate_disasm_line(ea, 0)
             if not self.colored_instruction:
@@ -107,7 +109,7 @@ class ASMLine:
         return f" {self.colored_address} {self.padding} {self.colored_instruction}"
 
 
-# option right click filter region like this
+# option right click filter region of asm_view
 class Filter(idaapi.action_handler_t):
     def __init__(self):
         super().__init__()
@@ -122,11 +124,12 @@ class Filter(idaapi.action_handler_t):
         start_ea = idaapi.BADADDR
         end_ea = idaapi.BADADDR
 
+        # multiple line
         if ctx.cur_flags & idaapi.ACF_HAS_SELECTION:
             # handle selection
             viewer = idaapi.get_viewer_user_data(ctx.widget)
 
-            # generate line at selection
+            # generate line at selection in asm_view
             start_place = idaapi.place_t_as_simpleline_place_t(ctx.cur_sel._from.at)
             start_line = start_place.generate(viewer, 1)[0][0]
             end_place = idaapi.place_t_as_simpleline_place_t(ctx.cur_sel.to.at)
@@ -149,6 +152,7 @@ class Filter(idaapi.action_handler_t):
                 start_ea = int(raw_line[0], 16)
                 end_ea = start_ea
 
+        # send start_ea/end_ea for recipe to add ingredient
         if start_ea != idaapi.BADADDR:
             self.signal_filter.filter_.emit(start_ea, end_ea)
         return 1
@@ -215,8 +219,10 @@ class ASMView(idaapi.simplecustviewer_t):
 
     def OnClose(self):
         self.ui_hooks.unhook()
+        self.db_hook.unhook()
         idaapi.unregister_action(FILTER_ACTION_NAME)
 
+    # mode disassembler
     def disassemble(self, start_ea, end_ea):
         self.start_ea = start_ea
         self.end_ea = end_ea
@@ -232,6 +238,7 @@ class ASMView(idaapi.simplecustviewer_t):
             is_code = idaapi.is_code(flags)
             current_type = "code" if is_code else "junk"
 
+            # prevent display too much nop, only display one line nop
             current_is_nop = False
             if is_code:
                 current_is_nop = DeobfuscateUtils.is_nop(next_addr)
@@ -268,7 +275,7 @@ class ASMView(idaapi.simplecustviewer_t):
             last_item_type = current_type
         self.Refresh()
 
-
+    # mode decompiler
     def decompile(self, start_ea, end_ea):
         self.start_ea = start_ea
         self.end_ea = end_ea
@@ -276,16 +283,16 @@ class ASMView(idaapi.simplecustviewer_t):
         self.lines_pseudocode_before_raw.clear()
 
         if not ida_hexrays.init_hexrays_plugin():
-            print("Fail init decompiler")
+            print("[Sharingan] Fail init decompiler")
             return
         func = idaapi.get_func(start_ea)
         if func is None:
-            print("Please provid address within a function")
+            print("[Sharingan] Please provid address within a function")
             return
         self.cfunc = ida_hexrays.decompile(func_ea)
         self.eamap = self.cfunc.get_eamap()
         if self.cfunc is None:
-            print("Failed to decompile!")
+            print("[Sharingan] Failed to decompile!")
             return
         pseudocode = self.cfunc.get_pseudocode()
         self.clear_lines()
@@ -303,6 +310,7 @@ class ASMView(idaapi.simplecustviewer_t):
         if self.mode == "disassembler" and ida_kernwin.get_widget_title(widget) == 'asm_view':
             idaapi.attach_action_to_popup(widget, popup, FILTER_ACTION_NAME, None, 0)
 
+    # colored line before and after when cooking
     def highlight_diff_lines(self, out, widget, info):
         if widget != self._twidget:
             return
@@ -343,6 +351,7 @@ class ASMView(idaapi.simplecustviewer_t):
             e.flags = idaapi.LROEF_FULL_LINE
             out.entries.push_back(e)
 
+    # use for mode decompiler, split to prevent display diff declaration
     def split_header_body(self, raw_lines, colored_lines):
         sep_index = -1
         for i, line in enumerate(raw_lines):
@@ -484,6 +493,7 @@ class ASMView(idaapi.simplecustviewer_t):
             else:
                 self.AddLine(item["content"])
 
+        # print others missing
         if is_diff and idx < len(intervals):
             is_diff = False
             prev_start, prev_end = intervals[idx]
@@ -572,9 +582,6 @@ class DisassembleTab(QWidget):
         layout.addLayout(layout_toolbar, stretch=1)
         layout.addWidget(self.layout_stack, stretch=10)
 
-    def __del__(self):
-        self.db_hooks.unhook()
-
     def get_selected_string_rows(self):
         return self.string_table.get_selected_string_rows()
 
@@ -654,7 +661,7 @@ class DisassembleTab(QWidget):
                 e_txt = self.ldt_end_ea.text().strip()
 
                 if not s_txt or not e_txt:
-                    print("Empty address")
+                    print("[Sharingan] Empty address")
                     return
 
                 start_ea = (
@@ -665,12 +672,11 @@ class DisassembleTab(QWidget):
                 )
 
                 if end_ea <= start_ea:
-                    # Logic cũ dùng assert nhưng trong GUI không nên crash app, chỉ return
-                    print("End EA must be greater than Start EA")
+                    print("[Sharingan] End EA must be greater than Start EA")
                     return
 
                 if self.cached_start_ea == start_ea and self.cached_end_ea == end_ea and self.cached_mode == self.mode:
-                    print("Same current range")
+                    print("[Sharingan] Same current range")
                     return
 
                 self.cached_start_ea = start_ea
@@ -678,7 +684,7 @@ class DisassembleTab(QWidget):
                 self.cached_mode = self.mode
 
             except ValueError:
-                print("Error parsing address")
+                print("[Sharingan] Error parsing address")
                 return
 
         if self.mode == "disassembler":

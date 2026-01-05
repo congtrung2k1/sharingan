@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QSplitter
 from PySide6.QtCore import Qt
-from sharingan.core.stylesmanager import ManageStyleSheet
+from sharingan.core.utils import ManageStyleSheet
 from sharingan.core.operation import Operation
 from sharingan.core.recipe import Recipe
 from sharingan.core.disassembler import Disassembler
@@ -37,6 +37,7 @@ class MainWindow(QMainWindow):
         self.layout_panel.addWidget(self.splitter)
         objEP.parent.setLayout(self.layout_panel)
 
+    # this mode for side by side another view of IDA (Disassembler/Decompiler)
     def toggle_compact(self):
         if self.recipe.chk_compact.isChecked():
             self.disassembler.hide()
@@ -48,4 +49,3 @@ class MainWindow(QMainWindow):
             self.disassembler.show()
             operation_width = self.operation.list_decryption.sizeHint().width()
             self.splitter.setSizes([operation_width, 1.5 * operation_width, 4 * operation_width])
-

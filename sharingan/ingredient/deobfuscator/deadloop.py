@@ -113,7 +113,7 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
 
             if loop_expr and loop_body:
                 if self.check_numeric_logic(loop_expr):
-                    print(f"--- [DEAD LOOP] detected at {hex(insn.ea)} ---")
+                    print(f"[Sharingan] --- [DEAD LOOP] detected at {hex(insn.ea)} ---")
 
                     scanner = BlockScanner(self.flowchart)
                     scanner.apply_to(loop_body, None)
@@ -147,11 +147,11 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
                             action=Action.PATCH
                         )
 
-                    start_expr = self.get_start_block(loop_expr)
-                    end_expr = self.get_end_block(loop_expr)
+                    # start_expr = self.get_start_block(loop_expr)
+                    # end_expr = self.get_end_block(loop_expr)
 
-                    size_expr = end_expr - start_expr
-                    possible_region.append_obfu(start_ea = start_expr, end_ea = end_expr, obfus_size = size_expr, comment = 'Expr Loop', patch_bytes = size_expr * b'\x90', action = Action.PATCH)
+                    # size_expr = end_expr - start_expr
+                    # possible_region.append_obfu(start_ea = start_expr, end_ea = end_expr, obfus_size = size_expr, comment = 'Expr Loop', patch_bytes = size_expr * b'\x90', action = Action.PATCH)
 
                     self.obfus_region.append(possible_region)
 
@@ -182,18 +182,18 @@ class DeadLoop(Deobfuscator):
         condition = self.ldt_condition.text()
 
         if not ida_hexrays.init_hexrays_plugin():
-            print("Hex-Rays decompiler not available.")
+            print("[Sharingan] Hex-Rays decompiler not available.")
             exit()
 
         f = idaapi.get_func(start_addr)
         if not f:
-            print("Please select a function.")
+            print("[Sharingan] Please select a function.")
             exit()
         cfunc = ida_hexrays.decompile(f)
         if cfunc:
-            print(f"\n[v] ANALYSIS LOG FOR: {idaapi.get_func_name(f.start_ea)}")
+            print(f"\n[Sharingan] [v] ANALYSIS LOG FOR: {idaapi.get_func_name(f.start_ea)}")
             visitor = FinderCondition(f, self.possible_obfuscation_regions, equation, condition)
             visitor.apply_to(cfunc.body, None)
-            print("[v] Analysis Finished.")
+            print("[Sharingan] [v] Analysis Finished.")
 
         return self.possible_obfuscation_regions

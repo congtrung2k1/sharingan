@@ -56,17 +56,17 @@ class Propagate(Deobfuscator):
     def hook_mem_invalid(self, uc, access, address, size, value, user_data):
         rip = uc.reg_read(UC_X86_REG_RIP)
 
-        print(f"\n[!] CRASH DETECTED!")
-        print(f"    - RIP: {hex(rip)}")
-        print(f"    - Access (Memory): {hex(address)}")
+        print(f"\n[Sharingan] [!] CRASH DETECTED!")
+        print(f"[Sharingan]     - RIP: {hex(rip)}")
+        print(f"[Sharingan]     - Access (Memory): {hex(address)}")
 
         try:
             insn = idc.GetDisasm(rip)
-            print(f"    -> Skipping instruction: {insn} (length: {size})")
+            print(f"[Sharingan]     -> Skipping instruction: {insn} (length: {size})")
             # return true to continue
             return True
         except Exception as e:
-            print(f"    -> Cannot skip: {e}")
+            print(f"[Sharingan]     -> Cannot skip: {e}")
             # if cannot disassemble instruction => return false to exit
             return False
 
@@ -87,7 +87,7 @@ class Propagate(Deobfuscator):
                     start_emu = idaapi.next_head(start_emu, idaapi.BADADDR)
                     break
         else:
-            print('Depth', depth)
+            print('[Sharingan] Depth', depth)
             for _ in range(depth):
                 start_emu = idaapi.prev_head(start_emu, self.imagebase)
                 if start_emu < self.start_ea:
@@ -109,7 +109,7 @@ class Propagate(Deobfuscator):
         # check boundary and skip insn call/jmp to prevent emulate outside
         def skip_insn_hook(uc, address, size, user_data):
             if address < self.start_ea or address > self.end_ea or address == idaapi.BADADDR:
-                print(f"Outside boundary {hex(self.start_ea)} {hex(self.end_ea)}")
+                print(f"[Sharingan] Outside boundary {hex(self.start_ea)} {hex(self.end_ea)}")
                 self.is_error = True
                 uc.emu_stop()
             elif DeobfuscateUtils.is_call(address) or DeobfuscateUtils.is_jmp(address):
@@ -139,11 +139,11 @@ class Propagate(Deobfuscator):
                 self.is_error = True
             # if emulation fails, skip those insn
             except UcError as e:
-                print(f"Error at {hex(start_emu)}: {e}")
+                print(f"[Sharingan] Error at {hex(start_emu)}: {e}")
                 reset_registers()
                 start_emu = idaapi.next_head(start_emu, idaapi.BADADDR)
                 if start_emu < self.start_ea or start_emu > self.end_ea or start_emu == idaapi.BADADDR or start_emu > addr_obfus:
-                    print(f"Cannot emulate this region {hex(self.start_ea)} {hex(self.end_ea)}")
+                    print(f"[Sharingan] Cannot emulate this region {hex(self.start_ea)} {hex(self.end_ea)}")
                     self.is_error = True
                     rax = 0
 
@@ -152,7 +152,7 @@ class Propagate(Deobfuscator):
         if self.text_segm.start_ea <= rax < self.text_segm.end_ea:
             return rax
         else:
-            print(f"Invalid jmp {hex(addr_obfus)} {hex(rax)}")
+            print(f"[Sharingan] Invalid jmp {hex(addr_obfus)} {hex(rax)}")
             return 0
 
     def scan(self, start_addr, end_addr):
@@ -185,7 +185,7 @@ class Propagate(Deobfuscator):
                     for d in range(1, 200):
                         bytes_emulation, start_emu = self.prepare_emulation(next_addr, depth=d)
                         if not bytes_emulation:
-                            print('Cannot extract bytecode')
+                            print('[Sharingan] Cannot extract bytecode')
                             break
                         addr_deob = self.emulate_code(bytes_emulation, start_emu, next_addr)
                         if addr_deob != 0:

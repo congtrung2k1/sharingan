@@ -29,7 +29,7 @@ class APIHammering(Deobfuscator):
     def scan(self, start_ea, end_ea):
         is_32bit = idaapi.inf_is_32bit_exactly()
         if not is_32bit:
-            print('Only support 32 bit')
+            print('[Sharingan] Only support 32 bit')
             return
 
         self.range_start = start_ea
@@ -41,7 +41,7 @@ class APIHammering(Deobfuscator):
             for i in range(0, count_import):
                 name_module = idaapi.get_import_module_name(i)
                 if not name_module:
-                    print('Failed to get module {i}')
+                    print('[Sharingan] Failed to get module {i}')
                     continue
                 idaapi.enum_import_names(i, self.callback_enumerate_xref)
         return self.possible_obfuscation_regions
@@ -95,11 +95,11 @@ class APIHammering(Deobfuscator):
                         idaapi.set_cmt(addr_call, 'Manually patch push instruction',0)
                         break
                     elif DeobfuscateUtils.is_mov(prev_addr):
-                        print(f"Maybe push {hex(prev_addr)}")
+                        print(f"[Sharingan] Maybe push {hex(prev_addr)}")
                         pass
                 self.possible_obfuscation_regions.append(possible_region)
             else:
-                print('Please define prototype API')
+                print('[Sharingan] Please define prototype API')
                 return
 
     def callback_enumerate_xref(self, api_addr, name_api, ord_api):

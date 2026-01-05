@@ -1,8 +1,14 @@
 import string
+import os
 
 import ida_bytes
 import idaapi
 import idc
+
+
+class OperatorMode:
+    DECRYPTION = "decryption"
+    DEOBFUSCATION = "deobfuscation"
 
 
 class Color:
@@ -13,6 +19,28 @@ class Color:
     BG_BOOKMARK = 0x3059AD              # brown: bookmark
 
 
+# load stylesheet for components in plugin
+class ManageStyleSheet:
+    stylesheet = None
+
+    @staticmethod
+    def load_stylesheet():
+        path_plugin = idaapi.get_ida_subdirs("plugins")
+        for path in path_plugin:
+            path_stylesheet = os.path.join(path, 'sharingan', 'core', 'styles.qss')
+            if os.path.exists(path_stylesheet):
+                with open(path_stylesheet, 'r') as file:
+                    ManageStyleSheet.stylesheet = file.read()
+                    break
+
+    @staticmethod
+    def get_stylesheet():
+        if not ManageStyleSheet.stylesheet:
+            ManageStyleSheet.load_stylesheet()
+        return ManageStyleSheet.stylesheet
+
+
+# collect common method in mode deobfuscation
 class DeobfuscateUtils:
     @staticmethod
     def get_bytes_as_hex_string(addr, size):
@@ -60,32 +88,32 @@ class DeobfuscateUtils:
     @staticmethod
     def is_call(addr):
         call_insn = set((idaapi.NN_call, idaapi.NN_callfi, idaapi.NN_callni))
-        instr = idaapi.insn_t()
-        idaapi.decode_insn(instr, addr)
-        return instr.itype in call_insn or idaapi.is_call_insn(instr)
+        insn = idaapi.insn_t()
+        idaapi.decode_insn(insn, addr)
+        return insn.itype in call_insn or idaapi.is_call_insn(insn)
 
     @staticmethod
     def is_push(addr):
-        instr = idaapi.insn_t()
-        idaapi.decode_insn(instr, addr)
-        return instr.itype == idaapi.NN_push
+        insn = idaapi.insn_t()
+        idaapi.decode_insn(insn, addr)
+        return insn.itype == idaapi.NN_push
 
     @staticmethod
     def is_mov(addr):
-        instr = idaapi.insn_t()
-        idaapi.decode_insn(instr, addr)
-        return instr.itype == idaapi.NN_mov
+        insn = idaapi.insn_t()
+        idaapi.decode_insn(insn, addr)
+        return insn.itype == idaapi.NN_mov
 
     @staticmethod
     def is_nop(addr):
         if idaapi.get_wide_byte(addr) == 0x90:
             return True
 
-        instr = idaapi.insn_t()
-        insn_len = idaapi.decode_insn(instr, addr)
+        insn = idaapi.insn_t()
+        insn_len = idaapi.decode_insn(insn, addr)
 
         if insn_len > 0:
-            if instr.itype == idaapi.NN_nop:
+            if insn.itype == idaapi.NN_nop:
                 return True
 
         return False
@@ -126,7 +154,18 @@ class DeobfuscateUtils:
     def is_all_nop(ba):
         return all(b == 0x90 for b in ba)
 
+    @staticmethod
+    def is_recipe_valid(recipe_obj):
+        if recipe_obj is None:
+            return False
+        try:
+            _ = recipe_obj.cmb_bookmark.count()
+            return True
+        except RuntimeError:
+            return False
 
+
+# collect common method in mode decryption
 class DecryptionUtils:
     @staticmethod
     def clamp_key(key: int, item_size: int = 1):

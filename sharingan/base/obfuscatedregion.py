@@ -17,6 +17,7 @@ class ObfuscatedRegion:
         self.regions: List[RegionData] = [RegionData(start_ea, end_ea, obfus_size, comment, patch_bytes, action)]
         self.name = name
 
+    # if rambling instruction, use append_obfu
     def append_obfu(self, start_ea: int, end_ea: int, obfus_size: int, comment: str, patch_bytes: bytes, action: Action) -> None:
         self.regions.append(RegionData(start_ea, end_ea, obfus_size, comment, patch_bytes, action))
 
@@ -28,7 +29,8 @@ class ObfuscatedRegion:
 
 
 # ListObfuscatedRegion contain many ObfuscatedRegion => one ingredient may responde many ObfuscatedRegion
-# ObfuscatedRegion contain field regions, symbol one obfuscated region
+# [[[a, a][a, a][a, a]][[b, b][b, b][b, b]]]
+# [[a, a][a, a][a, a]] is a ingredient, [a, a] is a region
 class ListObfuscatedRegion(list):
     def __init__(self) -> None:
         super().__init__()

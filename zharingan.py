@@ -1,6 +1,6 @@
 import idaapi
 from sharingan.mainwindow import MainWindow
-from sharingan.core.stylesmanager import ManageStyleSheet
+from sharingan.core.utils import ManageStyleSheet
 from sharingan.core.contextmenu import InitHookMenu
 from sharingan.core.StrFinder.ignore_store import flush_user_ignore_to_bundle
 

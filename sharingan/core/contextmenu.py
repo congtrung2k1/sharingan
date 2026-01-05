@@ -1,5 +1,6 @@
 import idaapi, ida_kernwin
 import re
+from sharingan.core.utils import DeobfuscateUtils
 
 
 BOOKMARK_LIST = 'sharingan:bookmark'
@@ -14,6 +15,7 @@ FILTER_ICON_DATA = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x00
 FILTER_ICON = idaapi.load_custom_icon(data=FILTER_ICON_DATA, format='png')
 
 
+# option for disassembler IDA View
 class HookRightClick(idaapi.UI_Hooks):
     def finish_populating_widget_popup(self, widget, popup, ctx):
         if idaapi.get_widget_type(widget) == idaapi.BWN_DISASM:
@@ -23,6 +25,7 @@ class HookRightClick(idaapi.UI_Hooks):
         return 0
 
 
+# connect to cmb_bookmark in recipe.py
 class HandlerBookmark(idaapi.action_handler_t):
     def __init__(self):
         super().__init__()
@@ -34,7 +37,7 @@ class HandlerBookmark(idaapi.action_handler_t):
         self.recipe = recipe
 
     def activate(self, ctx):
-        if self.recipe:
+        if DeobfuscateUtils.is_recipe_valid(self.recipe):
             valid_sel, start_ea, end_ea = idaapi.read_range_selection(None)
             if valid_sel:
                 self.start_ea = start_ea
@@ -45,19 +48,20 @@ class HandlerBookmark(idaapi.action_handler_t):
 
             hint = ida_kernwin.ask_str('', 0, 'Hint')
             if not hint:
-                print('Please input hint')
+                print('[Sharingan] Please input hint')
                 return
             if re.fullmatch(r'[a-zA-Z0-9\s]+', hint):
                 self.recipe.append_bookmark(self.start_ea, self.end_ea, hint)
             else:
-                print('Invalid character hint')
+                print('[Sharingan] Invalid character hint')
         else:
-            print('Please run plugin first')
+            print('[Sharingan] Please run plugin first')
 
     def update(self, ctx):
         return idaapi.AST_ENABLE_ALWAYS
 
 
+# reset selected colored region
 class HandlerExclusion(idaapi.action_handler_t):
     def __init__(self):
         super().__init__()
@@ -67,16 +71,17 @@ class HandlerExclusion(idaapi.action_handler_t):
         self.recipe = recipe
 
     def activate(self, ctx):
-        if self.recipe:
+        if DeobfuscateUtils.is_recipe_valid(self.recipe):
             cursor = idaapi.get_screen_ea()
             self.recipe.exclude_patch_false_positive(cursor)
         else:
-            print('Please run plugin first')
+            print('[Sharingan] Please run plugin first')
 
     def update(self, ctx):
         return idaapi.AST_ENABLE_ALWAYS
 
 
+# connect ingredient substitute
 class HandlerFilter(idaapi.action_handler_t):
     def __init__(self):
         super().__init__()
@@ -86,7 +91,7 @@ class HandlerFilter(idaapi.action_handler_t):
         self.recipe = recipe
 
     def activate(self, ctx):
-        if self.recipe:
+        if DeobfuscateUtils.is_recipe_valid(self.recipe):
             valid_sel, start_ea, end_ea = idaapi.read_range_selection(None)
             if valid_sel:
                 self.start_ea = start_ea
@@ -96,7 +101,7 @@ class HandlerFilter(idaapi.action_handler_t):
                 self.end_ea = idaapi.get_item_end(self.start_ea)
             self.recipe.add_ingredient_substitute(self.start_ea, self.end_ea)
         else:
-            print('Please run plugin first')
+            print('[Sharingan] Please run plugin first')
 
     def update(self, ctx):
         return idaapi.AST_ENABLE_ALWAYS

@@ -18,6 +18,6 @@ class Base64(Decryption):
         try:
             decoded = b64decode(cleaned, validate=False)
         except Exception as exc:
-            print(f"Base64 decrypt failed: {exc}")
+            print(f"[Sharingan] Base64 decrypt failed: {exc}")
             return raw
         return DecryptionUtils.to_preview_string(decoded)
