@@ -275,7 +275,7 @@ class Recipe(QWidget):
                 print('[Sharingan]', ingredient.name, 'disable')
                 continue
 
-            # check mode
+            # check mode, all ingredients must be same
             if not isinstance(ingredient, Deobfuscator):
                 print('[Sharingan]', ingredient.name, 'wrong mode')
 =======
