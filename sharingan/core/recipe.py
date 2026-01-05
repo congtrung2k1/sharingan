@@ -259,6 +259,7 @@ class Recipe(QWidget):
             self.start_ea = int(input_start, 16)
             self.end_ea = int(input_end, 16)
         except:
+<<<<<<< Updated upstream
             print("[Sharingan] Invalid start or end address (or empty input)")
 =======
             print('[Sharingan] Invalid address start and end')
@@ -277,6 +278,7 @@ class Recipe(QWidget):
 
             # check mode, all ingredients must be same
             if not isinstance(ingredient, Deobfuscator):
+<<<<<<< Updated upstream
                 print('[Sharingan]', ingredient.name, 'wrong mode')
 =======
                 print('[Sharingan]',ingredient.name, 'wrong mode')
@@ -303,6 +305,8 @@ class Recipe(QWidget):
                     is_end_in = self.start_ea <= reg.end_ea <= self.end_ea
                     if not is_start_in or not is_end_in:
                         print(f"[Sharingan] Obfuscated region {hex(reg.start_ea)} - {hex(reg.end_ea)} outside current view")
+<<<<<<< Updated upstream
+=======
                     # reset region to prepare highlight
 >>>>>>> Stashed changes
                     if is_start_in and is_end_in and not is_clear_bookmark:
@@ -461,6 +465,7 @@ class Recipe(QWidget):
 
                     if matched:
                         # Calculate total bounds for this group to reset
+<<<<<<< Updated upstream
                         total_start = min(reg.start_ea for reg in r.regions)
                         total_end = max(reg.end_ea for reg in r.regions)
                         DeobfuscateUtils.reset(total_start, total_end)
