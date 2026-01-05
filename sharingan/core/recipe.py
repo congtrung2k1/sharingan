@@ -18,19 +18,19 @@ class HintRawInsn(idaapi.UI_Hooks):
         if not self.hooked:
             super().hook()
             self.hooked = True
-            print("Hint hook installed.")
+            print("[Sharingan] Hint hook installed.")
 
     def unhook(self):
         if self.hooked:
             super().unhook()
             self.hooked = False
-            print("Hint hook removed.")
+            print("[Sharingan] Hint hook removed.")
 
     def insert_hint(self, ea, hint):
         self.dict_hints[ea] = hint
 
     def remove_hint(self, ea):
-        print('Remove hint', hex(ea))
+        print('[Sharingan] Remove hint', hex(ea))
         self.dict_hints.pop(ea)
 
     def get_custom_viewer_hint(self, viewer, place):
@@ -196,7 +196,7 @@ class Recipe(QWidget):
         self.disassembler.clear_highlight(active_index)
         if not is_preview:
             self.disassembler.clear_tab_asmview(active_index)
-        print('Reset all')
+        print('[Sharingan] Reset all')
 
     # delete item in list recipe
     def delete_ingredient(self):
@@ -247,7 +247,7 @@ class Recipe(QWidget):
             self.start_ea = int(input_start, 16)
             self.end_ea = int(input_end, 16)
         except:
-            print('Invalid address start and end')
+            print("[Sharingan] Invalid start or end address (or empty input)")
             return
 
         for i in range(self.list_recipe.count()):
@@ -256,21 +256,21 @@ class Recipe(QWidget):
 
             # skip disable
             if ingredient.chk_active.isChecked():
-                print(ingredient.name, 'disable')
+                print('[Sharingan]', ingredient.name, 'disable')
                 continue
 
             # check mode
             if not isinstance(ingredient, Deobfuscator):
-                print(ingredient.name, 'wrong mode')
+                print('[Sharingan]', ingredient.name, 'wrong mode')
                 return
 
             found_regions = ingredient.scan(self.start_ea, self.end_ea)
             if not found_regions:
                 continue
             elif type(found_regions) is not ListObfuscatedRegion:
-                print(f"Module {ingredient.name} return invalid type ListObfuscatedRegion")
+                print(f"[Sharingan] Module {ingredient.name} return invalid type ListObfuscatedRegion")
                 return
-            print('Done', ingredient.description)
+            print('[Sharingan] Done', ingredient.description)
 
             is_clear_bookmark = False
             self.obfuscated_regions.append(found_regions)
@@ -282,7 +282,7 @@ class Recipe(QWidget):
                     is_start_in = self.start_ea <= reg.start_ea < self.end_ea
                     is_end_in = self.start_ea <= reg.end_ea <= self.end_ea
                     if not is_start_in or not is_end_in:
-                        print(f"Obfuscated region {hex(reg.start_ea)} - {hex(reg.end_ea)} outside current view")
+                        print(f"[Sharingan] Obfuscated region {hex(reg.start_ea)} - {hex(reg.end_ea)} outside current view")
                     if is_start_in and is_end_in and not is_clear_bookmark:
                         is_clear_bookmark = True
                         DeobfuscateUtils.reset(self.start_ea, self.end_ea)
@@ -297,7 +297,7 @@ class Recipe(QWidget):
         #highlight and check overlap
         self.check_overlapping_regions()
         self.highlight_region()
-        print('Done scanning!!!')
+        print('[Sharingan] Done scanning!!!')
 
         # if some ingredient change atribute data/insn => refresh (not patching)
         active_index = self.disassembler.currentIndex()
@@ -311,24 +311,24 @@ class Recipe(QWidget):
     def preview_decryption(self):
         pipeline = self._get_active_decryption_pipeline()
         if not pipeline:
-            print("No active decryption ingredients.")
+            print("[Sharingan] No active decryption ingredients.")
             return
 
         selected_indices = self.disassembler.get_selected_string_indices()
         if not selected_indices:
-            print("No selected strings to decrypt.")
+            print("[Sharingan] No selected strings to decrypt.")
             return
 
         tbl_string = getattr(self.disassembler, "tbl_string", None)
         if tbl_string is None or not isinstance(tbl_string, list):
-            print("tbl_string not available in disassembler.")
+            print("[Sharingan] tbl_string not available in disassembler.")
             return
 
         selection_meta = []
         raw_values = []
         for idx in selected_indices:
             if not (0 <= idx < len(tbl_string)):
-                print(f"Selection index {idx} is out of range.")
+                print(f"[Sharingan] Selection index {idx} is out of range.")
                 continue
             entry = tbl_string[idx]
             if isinstance(entry, (tuple, list)) and len(entry) > 0:
@@ -341,7 +341,7 @@ class Recipe(QWidget):
             selection_meta.append((idx, ea))
 
         if not raw_values:
-            print("No valid strings selected for preview.")
+            print("[Sharingan] No valid strings selected for preview.")
             return
 
         decrypted_values = self.run_decryption(raw_values, pipeline=pipeline) or raw_values
@@ -361,7 +361,7 @@ class Recipe(QWidget):
                 continue
             widget = self.list_recipe.itemWidget(item)
             if not isinstance(widget, Decryption):
-                print('Wrong mode')
+                print('[Sharingan] Wrong mode')
                 return
             if isinstance(widget, Decryption) and not widget.chk_active.isChecked():
                 pipeline.append(widget)
@@ -380,9 +380,9 @@ class Recipe(QWidget):
                 try:
                     current = step.decrypt(current)
                 except Exception as exc:
-                    print(f"{step.name} decrypt failed: {exc}")
+                    print(f"[Sharingan] {step.name} decrypt failed: {exc}")
                     break
-                print('Done', step)
+                print('[Sharingan] Done', step)
             results.append(current)
 
         return results
@@ -439,7 +439,7 @@ class Recipe(QWidget):
                         total_start = min(reg.start_ea for reg in r.regions)
                         total_end = max(reg.end_ea for reg in r.regions)
                         DeobfuscateUtils.reset(total_start, total_end)
-                        print(f"Exclude region: {hex(total_start)} {hex(total_end)}")
+                        print(f"[Sharingan] Exclude region: {hex(total_start)} {hex(total_end)}")
                         list_regions.pop(j)
                         return
 
@@ -458,12 +458,12 @@ class Recipe(QWidget):
             start_index_bookmark = self.count_manual_bookmark + 2
             end_index_bookmark = self.cmb_bookmark.count()
             if self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea):
-                print(f"Duplicate region - {hex(start_ea)} - {hex(end_ea)}")
+                print(f"[Sharingan] Duplicate region - {hex(start_ea)} - {hex(end_ea)}")
                 return
             self.cmb_bookmark.addItem(ea_hint)
         else:
             if self.check_exist_bookmark(1, self.count_manual_bookmark + 1, start_ea, end_ea):
-                print(f"Already bookmark - {hex(start_ea)} - {hex(end_ea)}")
+                print(f"[Sharingan] Already bookmark - {hex(start_ea)} - {hex(end_ea)}")
                 return
             self.count_manual_bookmark += 1
             self.cmb_bookmark.insertItem(self.count_manual_bookmark, ea_hint)
@@ -510,7 +510,7 @@ class Recipe(QWidget):
 
                 if inter_start < inter_end:
                     self.overlapping_regions.add((inter_start, inter_end))
-                    print(f"Overlap detected: {hex(inter_start)} - {hex(inter_end)} "
+                    print(f"[Sharingan] Overlap detected: {hex(inter_start)} - {hex(inter_end)} "
                             f"between '{intervals[i]['name']}' and '{intervals[j]['name']}'")
                     has_overlap = True
 
@@ -534,7 +534,7 @@ class Recipe(QWidget):
     # patch
     def cook(self):
         if self.check_overlapping_regions():
-            print('Please resolve all overlapping region!')
+            print('[Sharingan] Please resolve all overlapping region!')
             return
 
         for list_regions in self.obfuscated_regions:
@@ -602,7 +602,7 @@ class Recipe(QWidget):
         DeobfuscateUtils.refresh_view()
         active_index = self.disassembler.currentIndex()
         self.disassembler.compare_tab_code(active_index, self.obfuscated_regions)
-        print('Done cooking!!!')
+        print('[Sharingan] Done cooking!!!')
 
     def exclude_patch_false_positive(self, cursor):
         color_insn = idc.get_color(cursor, idc.CIC_ITEM)
@@ -630,7 +630,7 @@ class Recipe(QWidget):
                             DeobfuscateUtils.reset(start_ea, end_ea)
 
                             # remove from bookmark
-                            print(f"Revert region: {hex(start_ea)} {hex(end_ea)}")
+                            print(f"[Sharingan] Revert region: {hex(start_ea)} {hex(end_ea)}")
                             list_regions.pop(j)
 
                             # refresh asmview
