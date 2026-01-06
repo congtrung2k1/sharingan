@@ -86,7 +86,7 @@ class Recipe(QWidget):
         self.setup_ui()
         self.list_recipe.setStyleSheet(ManageStyleSheet.get_stylesheet())
         # when append or delete bookmark (manual), it auto save. So when lost tab or exit ida, it can load previous bookmark
-        self.load_manual_bookmarks()
+        self.load_bookmarks()
 
     def setup_ui(self):
         self.list_recipe = DragDropRecipe()
@@ -139,52 +139,65 @@ class Recipe(QWidget):
         self.hint_hook.unhook()
 
     # check if bookmark is saved to restore
-    def get_manual_node(self):
-        NODE_NAME = "$sharingan_manual_bookmarks"
+    def get_bookmark_node(self):
+        NODE_NAME = "$sharingan_bookmarks"
         node = idaapi.netnode(NODE_NAME)
 
         if node.index() == idaapi.BADADDR:
             node.create(NODE_NAME)
         return node
 
-    # only bookmark manual is saved into database ida
-    def save_manual_bookmarks(self):
-        node = self.get_manual_node()
+    # cmb_bookmark is saved into database ida
+    def save_bookmarks(self):
+        node = self.get_bookmark_node()
         node.supdel_all(idaapi.stag)
 
         node.altset(0, self.count_manual_bookmark)
+        total_count = self.cmb_bookmark.count()
+        node.altset(1, total_count)
 
-        for i in range(1, self.count_manual_bookmark + 1):
+        for i in range(total_count):
             text = self.cmb_bookmark.itemText(i)
             node.supset(i, text.encode('utf-8'))
 
-        print(f"[Sharingan] Saved {self.count_manual_bookmark} manual bookmarks.")
+        print(f"[Sharingan] Saved {total_count} items. Manual count marker: {self.count_manual_bookmark}")
 
     # restore bookmark and load into QComboBox
-    def load_manual_bookmarks(self):
-        node = self.get_manual_node()
+    def load_bookmarks(self):
+        node = self.get_bookmark_node()
         if node.index() == idaapi.BADADDR:
             return
 
-        saved_count = node.altval(0)
-        if saved_count <= 0:
+        total_count = node.altval(1)
+        if total_count <= 0:
             return
 
         # block signal to prevent asm_view load
         self.cmb_bookmark.blockSignals(True)
+        self.cmb_bookmark.clear()
 
-        for i in range(1, saved_count + 1):
+        self.count_manual_bookmark = node.altval(0)
+
+        for i in range(total_count):
             val = node.supstr(i)
             if val:
-                self.cmb_bookmark.insertItem(i, val)
+                self.cmb_bookmark.addItem(val)
 
-        self.count_manual_bookmark = saved_count
+        if self.cmb_bookmark.count() > 0:
+            self.cmb_bookmark.model().item(0).setEnabled(False)
+
+        scanning_label_idx = self.count_manual_bookmark + 1
+        if self.cmb_bookmark.count() > scanning_label_idx:
+            self.cmb_bookmark.model().item(scanning_label_idx).setEnabled(False)
+
         self.cmb_bookmark.blockSignals(False)
-        print(f"[Sharingan] Restored {saved_count} manual bookmarks.")
+        print(f"[Sharingan] Restored bookmarks.")
 
     # value in QComboBox is text and seperated by dash. Splitting start and end region via dash
     def parse_start_end_region(self, index):
         selection = self.cmb_bookmark.itemText(index)
+        if selection in ('Scanning', 'Manual'):
+            return 0, 0
         parts = selection.split(' - ')
         if len(parts) == 3:
             return int(parts[0], 0), int(parts[1], 0)
@@ -205,6 +218,7 @@ class Recipe(QWidget):
         self.disassembler.clear_highlight(active_index)
         if not is_preview:
             self.disassembler.clear_tab_asmview(active_index)
+        self.save_bookmarks()
         print('[Sharingan] Reset all')
 
     # delete item in list recipe
@@ -416,9 +430,11 @@ class Recipe(QWidget):
             index = self.cmb_bookmark.currentIndex()
             selection = self.cmb_bookmark.itemText(index)
         else:
-            end_index = self.count_manual_bookmark
+            end_index = self.cmb_bookmark.count()
             for i in range(end_index, 0, -1):
                 start_region, end_region = self.parse_start_end_region(i)
+                if not start_region and not end_region:
+                    continue
                 if start_region <= exclude_addr <= end_region:
                     index = i
                     selection = self.cmb_bookmark.itemText(index)
@@ -434,10 +450,12 @@ class Recipe(QWidget):
         active_tab = self.disassembler.currentIndex()
         self.disassembler.clear_tab_asmview(active_tab)
         DeobfuscateUtils.reset(start_region, end_region)
+        self.save_bookmarks()
 
+        # delete manual region
         if 0 < index <= self.count_manual_bookmark:
             self.count_manual_bookmark -= 1
-            self.save_manual_bookmarks()
+            self.save_bookmarks()
         else:
             # delete manual scanning region if ingredient found, so when cooking those regions not patching
             # Iterate backwards to safely pop from list found obfuscated region
@@ -489,7 +507,7 @@ class Recipe(QWidget):
             self.count_manual_bookmark += 1
             self.cmb_bookmark.insertItem(self.count_manual_bookmark, ea_hint)
             DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_BOOKMARK)
-            self.save_manual_bookmarks()
+        self.save_bookmarks()
 
     # this method is called when selecting from cmb_bookmark
     def disassemble_range_addr(self, index):
@@ -631,6 +649,7 @@ class Recipe(QWidget):
         DeobfuscateUtils.refresh_view()
         active_index = self.disassembler.currentIndex()
         self.disassembler.compare_tab_code(active_index, self.obfuscated_regions)
+        self.save_bookmarks()
         print('[Sharingan] Done cooking!!!')
 
     # when selecting option exclusion, reset region into normal
@@ -669,28 +688,6 @@ class Recipe(QWidget):
                             active_index = self.disassembler.currentIndex()
                             self.disassembler.compare_tab_code(active_index, self.obfuscated_regions)
                             return
-        # remove hint
-        elif color_insn == Color.BG_HINT:
-            start_index = self.count_manual_bookmark + 2
-            end_index = self.cmb_bookmark.count()
-
-            for i in range(start_index, end_index):
-                possible_obfus = self.cmb_bookmark.itemText(i)
-                if possible_obfus in ('Scanning', 'Manual'):
-                    continue
-
-                # parse address start and end
-                try:
-                    parts = possible_obfus.split(' - ')
-                    start_obfus = int(parts[0], 0)
-                    end_obfus = int(parts[1], 0)
-                except (ValueError, IndexError):
-                    continue
-
-                # remove from bookmark and reset color
-                if start_obfus <= cursor < end_obfus:
-                    self.cmb_bookmark.removeItem(i)
-                    DeobfuscateUtils.reset(start_obfus, end_obfus)
-                    return
-        elif color_insn == Color.BG_BOOKMARK:
+        # remove hint and bookmark region
+        elif color_insn == Color.BG_HINT or color_insn == Color.BG_BOOKMARK:
             self.resolve(cursor)
