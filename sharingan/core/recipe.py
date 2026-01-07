@@ -323,6 +323,7 @@ class Recipe(QWidget):
                     max_end = max(reg.end_ea for reg in r.regions)
                     self.append_bookmark(min_start, max_end, hint, is_scan=True)
 
+        self.save_bookmarks()
         #highlight and check overlap
         self.check_overlapping_regions()
         self.highlight_region()
@@ -507,7 +508,6 @@ class Recipe(QWidget):
             self.count_manual_bookmark += 1
             self.cmb_bookmark.insertItem(self.count_manual_bookmark, ea_hint)
             DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_BOOKMARK)
-        self.save_bookmarks()
 
     # this method is called when selecting from cmb_bookmark
     def disassemble_range_addr(self, index):
