@@ -21,7 +21,7 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
             '<':  [30, 31],                 # cot_slt, cot_ult
             '<=': [26, 27]                  # cot_sle, cot_ule
         }
-        self.COT_NUM = 61  # cot_num
+        self.COT_NUM = 61                   # cot_num
 
     def check_numeric_logic(self, expr):
         if not expr:
@@ -72,7 +72,7 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
     def is_cmp_test(self, addr):
         instr = idaapi.insn_t()
         idaapi.decode_insn(instr, addr)
-        return instr.itype == idaapi.NN_cmp or instr.itype == idaapi.NN_test or instr.itype == idaapi.NN_and
+        return instr.itype in [idaapi.NN_cmp, idaapi.NN_test, idaapi.NN_and]
 
     def is_jmp(self, addr):
         return idc.print_insn_mnem(addr).startswith("j")
@@ -123,7 +123,8 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
         else:
             op_ea = expr.ea
             if op_ea != idaapi.BADADDR:
-                # maybe insn.ea not equal jmp => create region here
+                # can use recursive to get min and max address to get ea of cmp and jmp but compiler can insert some insn between them
+                # so cannot filter exactly
                 jmp_ea = self.find_jmp(op_ea)
                 cmp_ea = self.find_cmp_test(jmp_ea)
                 result.append({
