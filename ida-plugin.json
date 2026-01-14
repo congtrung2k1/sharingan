@@ -4,7 +4,7 @@
     "name": "Sharingan",
     "entryPoint": "zharingan.py",
     "version": "1.0.0",
-    "idaVersions": ["9.1", "9.2"],
+    "idaVersions": ["9.2"],
     "platforms": ["windows-x86_64", "macos-aarch64"],
     "description": "Assist IDA users with deobfuscation and string/data decryption through a drag-and-drop recipe workflow.",
     "categories": ["deobfuscation"],
@@ -12,7 +12,6 @@
     "pythonDependencies": [
       "pycryptodome==3.23.0",
       "pycryptodomex==3.23.0",
-      "PySide6==6.10.1",
       "unicorn==2.1.4"
     ],
     "urls": {
