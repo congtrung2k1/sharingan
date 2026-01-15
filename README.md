@@ -15,6 +15,8 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 
 ## Features
 
+![Demo](images/demo.gif)
+
 - **Easy UI**: Borrowed the drag-and-drop idea from CyberChef to keep things smooth and simple.
 - **Dual mode pipeline**: switch between deobfuscation and decryption.
 - **Built-in ingredients**: deobfuscators (`apihammering`, `dbjmp`, `deadif`, `deadloop`, `propagate`, `substitute`) and decryptors (`aes`, `rc4`, `xor`, `xorstr`, `base64`, `add`, `des`, `rol`, `sub`).
@@ -44,7 +46,7 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
    - `Compact`: hide the disassembler/decompiler pane for side-by-side layouts.
    - `Auto patch`: apply patches automatically when preview.
    - `All binary`: operate on the entire binary instead of a selection.
-3. Click **Preview** to show the found obfuscated regions in the docked `asm_view` (ASM or Hex-Rays). Use **Reset** to clear scanning entries; **Delete** to remove ingredients from the recipe; **Resolve** to mark selected region from Bookmark as done and delete it. After ensuring the found regions are corrent, use **Cook** to apply patches and display changes before/after.
+3. Click **Preview** to show the found obfuscated regions in the docked `asm_view` (ASM or Hex-Rays). Use **Reset** to clear scanning entries and output; **Delete** to remove ingredients from the recipe; **Resolve** to mark selected region from Bookmark as done and delete it. After ensuring the found regions are corrent, use **Cook** to apply patches and display changes before/after.
 4. Each tab represents a region. There is a button new tab to handle many different regions.
 
 ### Decryption

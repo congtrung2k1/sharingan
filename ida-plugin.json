@@ -1,7 +1,7 @@
 {
   "IDAMetadataDescriptorVersion": 1,
   "plugin": {
-    "name": "Sharingan",
+    "name": "sharingan",
     "entryPoint": "zharingan.py",
     "version": "1.0.2",
     "idaVersions": ["9.2"],
