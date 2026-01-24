@@ -262,7 +262,8 @@ class StringFinderTable(QWidget):
         if not raw_xrefs:
             print("[Sharingan] No xrefs recorded for the selected string.\n")
             return
-        print(f"[Sharingan] Xrefs for row {row + 1}: {", ".join(f"0x{ea:08X}" for ea in raw_xrefs)}\n")
+        xrefs_str = ", ".join(f"0x{ea:08X}" for ea in raw_xrefs)
+        print(f"[Sharingan] Xrefs for row {row + 1}: {xrefs_str}\n")
 
     # ------------------------------------------------------------------
     # Copy all selected rows (highlighted rows) as a table for outer using.
@@ -399,7 +400,8 @@ class StringFinderTable(QWidget):
             address = item.get("address", 0)
             preview_value = item.get("preview") or raw_value
             xref_list = item.get("xrefs") or []
-            xref_text = f"({len(xref_list)} xrefs) {("\n".join(f"0x{ea:08X}" for ea in xref_list) if xref_list else "0")}"
+            xrefs_joined = "\n".join(f"0x{ea:08X}" for ea in xref_list) if xref_list else "0"
+            xref_text = f"({len(xref_list)} xrefs) {xrefs_joined}"
 
             self.tbl_string.setItem(row, 1, idx_item)
             self.tbl_string.setItem(row, 2, self._make_table_item(raw_value, tooltip=raw_value))
